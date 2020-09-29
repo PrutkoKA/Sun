@@ -28,7 +28,8 @@ double Loop::GetTime()
 void Loop::Refresh(string col_name, function<double(vector < double >, int)> foo, vector < double > parameters)
 {
 	for (int i = 0; i < col_size; i++)
-		Data_[columns[col_name] + i * col_num] = foo(parameters, i);
+		//Data_[columns[col_name] + i * col_num] = foo(parameters, i);
+		Data[columns[col_name]][i] = foo(parameters, i);
 }
 
 void Loop::Refresh(string col_name, DataBase db)

@@ -1,0 +1,17 @@
+solver: cusp
+gas: Ideal
+Cp: 1005
+gamma: 1.4
+cfl: 0.5
+max_iter_num: 50000
+tolerance: 1e-5
+
+RK_stage_coeffs: [0.25, 0.1667, 0.375, 0.5, 1.]
+res_smooth_flag: [1, 1, 1, 1, 1]
+eps_impl_res_smooth: 0.8
+
+cds:
+  diss_blend: [1.00  , 0.00  , 0.56  , 0.00  , 0.44]
+  diss_flag: [1, 0, 1, 0, 1]
+  vis2: 0.7
+  vis4: 64
