@@ -35,26 +35,21 @@ public:
 	const string TYPE_COL = "type";
 
 	int ReadFile(string file_name);
-	void SetData(valarray < double > table);
 	void SetData(vector < vector < double > > table);
-	void SetData(valarray < double > table, map< string, int > columns_);
 	void SetData(vector < vector < double > > table, map< string, int > columns_);
 	void SetRow(string col_name, double value);
 	void SetRow(string col_name, vector < double > values);
 	void ShowData(int lines = -1);
-	//void ShowData(valarray< double > table, int lines = -1);
+
 	void ShowData(vector < vector < double > > table, int lines = -1);
 	int PrintHeader(string file_name);
 	int PrintRow(string file_name, valarray< double > row);
 	int PrintRow(string file_name, vector< double > row);
 	int PrintColumn(string file_name, vector< double > column);
 	int PrintTable(string file_name);
-	int PrintTable(string file_name, valarray< double > table);
 	int PrintTable(string file_name, vector < vector < double > > table);
 	void ShowHeader();
-	void ShowRow(valarray< double > row);
 	void ShowRow(int row_num);
-	//void ShowRow(int row_num, valarray < double > table);
 	void ShowRow(int row_num, vector < vector < double > > table);
 	void ShowColumn(string col_name);
 	void ShowColumn(vector< double > column);
@@ -63,17 +58,13 @@ public:
 	vector < vector < double > > GetTable();
 	map< string, int > GetColumnNames();
 
-	//valarray< double > NewTable(string col_name, double step, 
 	vector < vector < double > > NewTable(string col_name, double step,
 		vector < string > ignore_cols = vector < string >(), bool INCLUDE_POINTS = false);
 
-	//valarray< double > NewTable(string col_name, vector < double > range, 
 	vector < vector < double > > NewTable(string col_name, vector < double > range,
 		vector < string > ignore_cols = vector < string >(), bool INCLUDE_POINTS = false);
 
-	//valarray< double > GetRow(int row_n);
 	valarray < double > GetRow(int row_n);
-	valarray< double > GetRow(int row_n, valarray< double > table);
 	valarray < double > GetRow(int row_n, vector < vector < double > > table);
 	int AddColumn(string col_name, vector < double > new_column);
 	valarray< double > GetFromPoint(string col_name, double value);

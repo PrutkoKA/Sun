@@ -13,16 +13,16 @@ CUSP::CUSP(sol_struct& sol_init_) : Solver( sol_init_)
 void CUSP::LRState()
 {
 	if (ls.size() == 0) {
-		ls.resize(3);
-		rs.resize(3);
-		for (int i = 0; i < 3; ++i) {
+		ls.resize(var_num);
+		rs.resize(var_num);
+		for (int i = 0; i < var_num; ++i) {
 			ls[i].resize(imax, 0.);
 			rs[i].resize(imax, 0.);
 		}
 	}
 
 	double af, bf;
-	double delt[3];
+	vector < double > delt(var_num, 0.);
 	double* d1 = dummy.data() + 1;
 	double* d2 = dummy.data() + 1 + (imax + 1);
 	double* d3 = dummy.data() + 1 + (imax + 1) * 2;
@@ -67,6 +67,48 @@ void CUSP::LRState()
 
 }
 
+void CUSP::LRState(string var_)
+{
+	if (ls.size() == 0) {
+		ls.resize(var_num);
+		rs.resize(var_num);
+		for (int i = 0; i < var_num; ++i) {
+			ls[i].resize(imax, 0.);
+			rs[i].resize(imax, 0.);
+		}
+	}
+
+	double delt;
+	double* d1 = dummy.data() + 1;
+
+	// first differences of rho, u, p
+
+	for (int i = 0; i < ib2; ++i)
+	{
+		for (int var = 0; var < var_num; ++var) {
+			d1[var * (imax + 1) + i] = fv[var][i + 1] - fv[var][i];
+		}
+	}
+	for (int var = 0; var < var_num; ++var) {
+		d1[var * (imax + 1) - 1] = d1[var * (imax + 1) + 0];
+		d1[var * (imax + 1) + imax - 1] = d1[var * (imax + 1) + ib2 - 1];
+	}
+
+	// left / right state
+
+	for (int i = 0; i < ib2; ++i)
+	{
+		for (int var = 0; var < var_num; ++var) {
+			delt = 0.25 * (d1[var * (imax + 1) + i + 1] + d1[var * (imax + 1) +  i - 1]) *
+				  CUSPLimiter(d1[var * (imax + 1) + i + 1],  d1[var * (imax + 1) + i - 1]);
+
+			rs[var][i] = fv[var][i + 1] - delt;
+			ls[var][i] = fv[var][i + 0] + delt;
+		}
+	}
+
+}
+
 // CUSPLIM = original CUSP (SLIP) limiter (Eq. (4.121))
 
 double CUSP::CUSPLimiter(double af, double bf)
@@ -78,7 +120,7 @@ void CUSP::Fluxes()
 {
 	double ggm1;
 	double si, rl, ul, pl, hl, qrl, rr, ur, pr, hr, qrr, rav, uav, pav, cav, machn, afac, bfac, h1;
-	double fcav[3], fdiss[3];
+	vector < double > fcav(eq_num, 0.), fdiss(eq_num, 0.);
 	double gamma_ = GetGamma();
 
 	ggm1 = gamma_ / (gamma_ - 1.);
@@ -145,6 +187,108 @@ void CUSP::Fluxes()
 		rhs[1][i] = dummy[1 * imax + i] - dummy[1 * imax + i - 1];
 		rhs[2][i] = dummy[2 * imax + i] - dummy[2 * imax + i - 1];
 
+	}
+}
+
+void CUSP::RHS(int i)
+{
+	double ggm1;
+	double si, rav, uav, pav, cav, machn, afac, bfac, h1;
+	vector < double > fcav(eq_num, 0.), fdiss(eq_num, 0.);
+	double gamma_ = GetGamma();
+	double term_l;
+	double term_r;
+
+	ggm1 = gamma_ / (gamma_ - 1.);
+
+	for (int i = 0; i < ib2; ++i) {
+
+		si = 0.5 * (a[i + 1] + a[i]);
+		
+		// average of left and right convective fluxes
+		for (int eq = 0; eq < eq_num; ++eq) {
+			vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+			fcav[eq] = 0;		// Flux Convective AVerage
+			for (int id = 0; id < cur_dx.size(); ++id) 
+			{
+				term_l = 1.;
+				term_r = 1.;
+				for (auto var : cur_dx[id]) 
+				{
+					term_l *= ls[var][i];
+					term_r *= rs[var][i];
+				}
+				fcav[eq] += term_l + term_r;
+			}
+		}
+
+		// dissipative fluxes
+
+		rav = 0.5 * (fv[RHO][i + 1] + fv[RHO][i]);
+		uav = 0.5 * (fv[U][i + 1] + fv[U][i]);
+		pav = 0.5 * (fv[P][i+1] + fv[P][i]);
+		cav = sqrt(gamma_ * pav / rav);
+		machn = (uav) / cav;
+
+		if (machn >= 0. && machn < 1.) {
+			h1 = 2. * machn - 1.;
+			bfac = max(0., h1);
+		} else if (machn > -1. && machn < 0.) {
+			h1 = 2. * machn + 1.;
+			bfac = min(0., h1);
+		} else {
+			bfac = Sign(h1);
+		}
+
+		afac = abs(uav) - bfac * uav;
+
+		for (int eq = 0; eq < eq_num; ++eq) {
+			vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+			vector < vector < int > >& cur_dt = equations[eq].cur_dt;
+
+			fdiss[eq] = 0.;
+			for (int id = 0; id < cur_dt.size(); ++id) 
+			{
+				term_l = 1.;
+				term_r = 1.;
+				for (auto var : cur_dt[id]) 
+				{
+					term_l *= ls[var][i];
+					term_r *= rs[var][i];
+				}
+				fdiss[eq] += afac * (term_r - term_l);
+			}
+			for (int id = 0; id < cur_dx.size(); ++id) 
+			{
+				term_l = 1.;
+				term_r = 1.;
+				for (auto var : cur_dx[id]) 
+				{
+					term_l *= ls[var][i];
+					term_r *= rs[var][i];
+				}
+				fdiss[eq] += bfac * (term_r - term_l);
+			}
+		}
+
+		// total fluxes at i+1/2
+
+		for (int eq = 0; eq < eq_num; ++eq) {
+			dummy[eq * imax + i] = 0.5 * (fcav[eq] - fdiss[eq]) * si;
+		}
+
+	}
+
+	// sum of fluxes = RHS
+
+	for (int i = 1; i < ib2; ++i)
+	{
+		for (int eq = 0; eq < eq_num; ++eq) {
+			int dt_var = equations[eq].dt_var;
+
+			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+		}
 	}
 }
 

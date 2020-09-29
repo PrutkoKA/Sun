@@ -1,4 +1,4 @@
-solver: cusp
+solver: cds
 gas: Ideal
 Cp: 1005
 gamma: 1.4

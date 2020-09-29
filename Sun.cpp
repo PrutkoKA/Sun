@@ -20,13 +20,13 @@ int main()
 
 	// Time();
 
-	// Laval2();
+	 Laval2();
 
 	// Laval3();
 
 	// Laval4();
 
-	Laval5();
+	//Laval5();
 
     return 0;
 }

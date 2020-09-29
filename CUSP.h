@@ -16,12 +16,15 @@ class CUSP : public Solver {
 public:
 	CUSP(sol_struct& sol_init_);
 	virtual void LRState();
+	virtual void LRState(string var_);
 	virtual void Fluxes();
 	double CUSPLimiter(double af, double bf);
 	// virtual double Solve();
 	virtual const vector < int >& GetDissFlag();
 	virtual const vector < double >& GetDissBlend();
 	virtual void Dissipation(double beta);
+
+	virtual void RHS(int i);
 	// virtual void Fluxes();
 
 private:

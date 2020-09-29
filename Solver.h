@@ -6,13 +6,7 @@
 #include <vector>
 #include <string>
 #include <set>
-
-//include (ExternalProject)
 #include "yaml-cpp/yaml.h"
-//
-//target_link_libraries(playground
-//	yaml-cpp
-//)
 
 #include "Loop.h"
 
@@ -36,9 +30,41 @@ struct sol_struct
 class Solver
 {
 public:
+	map < string, int > vars { {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
+	map < string, int > vars_o { {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3} };
+	enum Vars_o {
+		RHO,
+		U,
+		P,
+		H
+	};
+
+	enum Vars {
+		RHO_A,
+		RHO_U_A,
+		RHO_E_A
+	};
+
+	struct equation
+	{
+		string eq_name;
+		int dt_var;
+		vector < vector < int > > cur_dt;
+		vector < vector < int > > cur_dx;
+
+		equation(string eq_name_, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
+		vector < vector < int > > dt_term(string dt_term_, map < string, int > vars_o);
+		vector < vector < int > > dx_term(string dx_term_, map < string, int > vars_o);
+	};
+
 	string solver_name;
 
+	int eq_num, var_num;
+	int cur_Q;
+	vector < equation > equations;
+
 	vector < vector < double > > cv;
+	vector < vector < double > > fv;	// field var
 	vector < double > p;
 	vector < double > dt;
 	vector < double > dummy;
@@ -57,11 +83,10 @@ public:
 
 	bool NoOutput;
 
-	// int direction;
-
 	Solver(sol_struct& sol_init_);
 
-	// int ReadConfigFile(string file_name);	///< Reading Config file
+	void SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
+
 	void ReadBoundaries(string file_name);		///< Reading Boundary file
 	void InitFlow(double rho, double mass, double e, double p2);
 	void RefreshBoundaries();
@@ -76,7 +101,6 @@ public:
 	void CalculateVolumes();		///< Recalculate columes in grid
 
 	double GetGamma();
-	// double GetCp();
 	double GetInflowT();
 	double GetInflowP();
 	double GetOutflowP();
@@ -95,7 +119,10 @@ public:
 	virtual const vector < double >& GetDissBlend() = 0;
 	virtual void Dissipation(double beta) = 0;
 	virtual void LRState() = 0;
+	virtual void LRState(string var_) = 0;
 	virtual void Fluxes() = 0;
+	virtual void RHS(int i) = 0;
+	void RhoUPH();
 	void TimeSteps();
 	void SourceTerm();
 	void ImplResidualSmooth();
@@ -104,6 +131,8 @@ public:
 	void SetOutputFile(string output_file_);
 	void ShowOutput();
 	void HideOutput();
+
+	double CalcH(double p_, double Rho_, double U_);
 
 private:
 	Loop grid;
@@ -131,15 +160,6 @@ private:
 
 	int RK_stages_num;					///< number of Runge-Kutta stages
 
-	// vector < vector < double > > cv;
-	// vector < double > p;
-	// vector < double > dt;
-	// vector < double > dummy;
-
-	// vector < vector < double > > cvold;
-	// vector < vector < double > > diss;
-
-	// map < 
 };
 
 Solver* CreateReadConfigFile(string file_name);

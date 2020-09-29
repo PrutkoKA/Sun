@@ -8,11 +8,6 @@ using namespace YAML;
 
 set < string > solvers { "cds", "cusp" };
 
-// int Solver::ReadConfigFile(string file_name)
-// {
-	
-// }
-
 Solver::Solver(sol_struct& sol_init_) :
 					Ideal((sol_init_.gas == "Ideal" ? true : false)),
 					Cp(sol_init_.Cp),
@@ -24,8 +19,10 @@ Solver::Solver(sol_struct& sol_init_) :
 					res_smooth_flag(sol_init_.res_smooth_flag),
 					eps_impl_res_smooth(sol_init_.eps_impl_res_smooth)
 {
+	eq_num = vars.size();
+	var_num = vars_o.size();
 	iter = 0;
-	// direction = -1;
+
 	NoOutput = false;
 
 	if (Ideal) {
@@ -55,6 +52,15 @@ Solver::Solver(sol_struct& sol_init_) :
 	cout << endl;
 
 	RK_stages_num = RK_stage_coeffs.size();
+
+	SetEquation("mass", "RhoA", "RhoU", vars, vars_o);
+	SetEquation("impulse", "RhoUA", "RhoUU+p", vars, vars_o);
+	SetEquation("energy", "RhoEA", "RhoHU", vars, vars_o);
+}
+
+void Solver::SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_)
+{
+	equations.push_back( equation (eq_name, dt_term_, dx_term_, vars_, vars_o_) );
 }
 
 void Solver::ReadBoundaries(string file_name)
@@ -101,17 +107,11 @@ void Solver::InitFlow(double rho, double mass, double e, double p2)
 {
 	cout << "Initializing flow" << endl;
 
-	// if (cv.size() > 0)
-	// 	cv.clear();
-
-	// if (p.size() > 0)
-	// 	p.clear();
-
-	cv.resize(3);
-	cvold.resize(3);
-	diss.resize(3);
-	rhs.resize(3);
-	for (int i = 0; i < 3; ++i) {
+	cv.resize(eq_num);
+	cvold.resize(eq_num);
+	diss.resize(eq_num);
+	rhs.resize(eq_num);
+	for (int i = 0; i < eq_num; ++i) {
 		cv[i].resize(imax, 0.);
 		cvold[i].resize(imax, 0.);
 		diss[i].resize(imax, 0.);
@@ -119,13 +119,13 @@ void Solver::InitFlow(double rho, double mass, double e, double p2)
 	}
 	p.resize(imax, 0.);
 	dt.resize(imax, 0.);
-	dummy.resize(imax * 4, 0.);
+	dummy.resize((imax + 1) * (var_num + 1), 0.);
 
 	for (int i = 0; i < imax; ++i)
 	{
-		cv[0][i] = rho * a[i];		//	$\rho S$
-		cv[1][i] = mass;					//	$\rho u S$
-		cv[2][i] = rho * e * a[i];	//	$\rho E S$
+		cv[RHO_A][i] = rho * a[i];		//	$\rho S$
+		cv[RHO_U_A][i] = mass;					//	$\rho u S$
+		cv[RHO_E_A][i] = rho * e * a[i];	//	$\rho E S$
 		p[i] = p2;
 	}
 }
@@ -155,8 +155,8 @@ void Solver::RefreshBoundaries()
 
 	// Inflow boundaries
 	rgas = gam1 * Cp / gamma;
-	u = cv[1][in_id_p1] / cv[0][in_id_p1];		///< $u = \frac{(\rho u S)_{[1]}} {(\rho  S)_{[1]}}$
-	cs2 = gamma * p[in_id_p1] * a[in_id_p1] / cv[0][in_id_p1];	// Speed of sound $c_s^2 = \frac{\gamma_ p_{[1]} S_{[1]}} { \rho  S_{[1]}}$
+	u = fv[U][in_id_p1]; // cv[1][in_id_p1] / cv[0][in_id_p1];		///< $u = \frac{(\rho u S)_{[1]}} {(\rho  S)_{[1]}}$
+	cs2 = gamma * fv[P][in_id_p1] / fv[RHO][in_id_p1]; // p[in_id_p1] * a[in_id_p1] / cv[0][in_id_p1];	// Speed of sound $c_s^2 = \frac{\gamma_ p_{[1]} S_{[1]}} { \rho  S_{[1]}}$
 	c02 = cs2 + 0.5 * gam1 * u * u;			// Stagnation speed of sound$c_0^2 = c_s^2 + 0.5 (\gamma_ - 1) u^2$
 	rinv = abs(u) - 2. * sqrt(cs2) / gam1;		// Riemann invariant $R^-$, $r_{inv} = u - 2 \frac{\sqrt{c_s^2}}{\gamma_ - 1} $ 		// fix is here
 	dis = gap1 * c02 / (gam1 * rinv * rinv) - 0.5 * gam1;	// $dis = \frac{(\gamma_ + 1) c_0^2}{(\gamma_ - 1) r_{inv}^2}$
@@ -170,9 +170,9 @@ void Solver::RefreshBoundaries()
 	rhob = pb / (rgas * tb);		//  $\rho_b = \frac{p_b}{r_{gas} T_b}$
 	ub = Sign(u) * sqrt(2. * Cp * (T_b_in - tb));		// $u_b = \sqrt{2 c_{p, gas} \left(T_{01} - T_b\right)}$ 		// fix is here
 
-	cv[0][in_id] = rhob * a[in_id_p1];		//	$\rho S = \rho_b S_{[1]}$
-	cv[1][in_id] = rhob * a[in_id_p1] * ub;					//	$\rho u S = \rho_b S_{[1]} u_b$
-	cv[2][in_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[in_id_p1];	//	$\rho E S = \left(\frac{p_b}{\gamma_ - 1} + 0.5 \rho_b u_b^2\right) S_{[1]}$
+	cv[RHO_A][in_id] = rhob * a[in_id_p1];		//	$\rho S = \rho_b S_{[1]}$
+	cv[RHO_U_A][in_id] = rhob * a[in_id_p1] * ub;					//	$\rho u S = \rho_b S_{[1]} u_b$
+	cv[RHO_E_A][in_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[in_id_p1];	//	$\rho E S = \left(\frac{p_b}{\gamma_ - 1} + 0.5 \rho_b u_b^2\right) S_{[1]}$
 	p[in_id] = pb;
 
 	// Outflow boundaries
@@ -181,8 +181,8 @@ void Solver::RefreshBoundaries()
 	out_id = (out_id > 0 ? out_id - 1 : out_id);
 	int out_id_p1 = (out_id > 0 ? out_id - 1 : out_id + 1);
 
-	rho = cv[0][out_id_p1] / a[out_id_p1];
-	u = cv[1][out_id_p1] / cv[0][out_id_p1];
+	rho = fv[RHO][out_id_p1]; // cv[0][out_id_p1] / a[out_id_p1];
+	u = fv[U][out_id_p1]; // cv[1][out_id_p1] / cv[0][out_id_p1];
 	cs = sqrt(gamma * p[out_id_p1] / rho);
 
 	if (abs(u) >= cs) {		// supersonic flow 		// fix is here
@@ -196,9 +196,9 @@ void Solver::RefreshBoundaries()
 		ub = u - Sign(u)*(p_b_out - p[out_id_p1]) / (cs * rho);		// $u_b = u - \frac{(p_2 - p_{[ib2 - 1]})}{c_s \rho}$ 		// fix is here
 	}
 
-	cv[0][out_id] = rhob * a[out_id_p1];
-	cv[1][out_id] = rhob * ub * a[out_id_p1];
-	cv[2][out_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[out_id_p1];
+	cv[RHO_A][out_id] = rhob * a[out_id_p1];
+	cv[RHO_U_A][out_id] = rhob * ub * a[out_id_p1];
+	cv[RHO_E_A][out_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[out_id_p1];
 	p[out_id] = pb;
 
 }
@@ -338,10 +338,10 @@ double Solver::Solve()
 		diss_flag_ = GetDissFlag();
 		diss_blend_ = GetDissBlend();
 	}
-	
+
 	// Store previous solution; set dissipation = 0
 	cvold = cv;
-	for (int i = 0; i < 3 && solver_name == "cds"; ++i)
+	for (int i = 0; i < eq_num && solver_name == "cds"; ++i)
 		diss[i].assign(diss[i].size(), 0.);
 
 	// Calculate time step
@@ -350,14 +350,17 @@ double Solver::Solve()
 	// loop over the R. - K. stages:
 	for (int rks = 0; rks < RK_stages_num; ++rks)
 	{
-		if (solver_name == "cds" && diss_flag_[rks] == 1) {	// artificial dissipation
-			Dissipation(diss_blend_[rks]);
-		} else {
-			LRState();
-		}
+		  if (solver_name == "cds" && diss_flag_[rks] == 1) {	// artificial dissipation
+		  	Dissipation(diss_blend_[rks]);
+		  } else {
+		  	//LRState();
+			RhoUPH();
+			LRState("");
+		  }
 
-		// convective flux
-		Fluxes();
+		 // convective flux
+		 Fluxes();
+		 //RHS(0);
 
 		// source term
 		SourceTerm();
@@ -367,9 +370,8 @@ double Solver::Solve()
 		for (int i = 1; i < ib2; ++i)
 		{
 			adtv = fac * dt[i] / vol[i];
-			rhs[0][i] = adtv * rhs[0][i];
-			rhs[1][i] = adtv * rhs[1][i];
-			rhs[2][i] = adtv * rhs[2][i];
+			for (int eq = 0; eq < eq_num; ++eq)
+				rhs[eq][i] = adtv * rhs[eq][i];
 		}
 
 		// implicit residual smoothing
@@ -379,22 +381,41 @@ double Solver::Solve()
 		// update (conservative variables and pressure)
 		for (int i = 1; i < ib2; ++i)
 		{
-			cv[0][i] = cvold[0][i] - rhs[0][i];
-			cv[1][i] = cvold[1][i] - rhs[1][i];
-			cv[2][i] = cvold[2][i] - rhs[2][i];
+			for (int eq = 0; eq < eq_num; ++eq)
+				cv[eq][i] = cvold[eq][i] - rhs[eq][i];
 
-			rrho = a[i] / cv[0][i];
-			rhou = cv[1][i] / a[i];
-			rhoe = cv[2][i] / a[i];
+			rrho = a[i] / cv[RHO_A][i];
+			rhou = cv[RHO_U_A][i] / a[i];
+			rhoe = cv[RHO_E_A][i] / a[i];
 			p[i] = (gamma - 1.) * (rhoe - 0.5 * rhou * rhou *rrho);
 		}
 
 		// boundary conditions
 
+		RhoUPH();
 		RefreshBoundaries();
 	}
 
 	return Convergence();
+}
+
+void Solver::RhoUPH()
+{
+	double gamma_ = GetGamma();
+
+	if (fv.size() == 0) {
+		fv.resize(var_num);
+		for (int i = 0; i < var_num; ++i) {
+			fv[i].resize(imax, 0.);
+		}
+	}
+	for (int i = 0; i < imax; ++i)
+	{
+		fv[RHO][i] = cv[0][i] / a[i];
+		fv[U][i] = cv[1][i] / cv[0][i];
+		fv[P][i] = p[i];
+		fv[H][i] = gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2);
+	}
 }
 
 void Solver::TimeSteps()
@@ -407,8 +428,8 @@ void Solver::TimeSteps()
 
 	for (int i = 1; i < ib2; ++i)
 	{
-		rho = cv[0][i] / a[i];
-		u = cv[1][i] / cv[0][i];
+		rho = cv[RHO_A][i] / a[i];
+		u = cv[RHO_U_A][i] / cv[RHO_A][i];
 		cs = sqrt(gamma * p[i] / rho);
 		dx = 0.5 * (x[i + 1] - x[i - 1]);
 		sprad = cs * sqrt(dx * dx + pow(a[i], 2)) + abs(u) * a[i];
@@ -416,7 +437,6 @@ void Solver::TimeSteps()
 	}
 	dt[0] = dt[1];
 	dt[imax - 1] = dt[ib2 - 1];
-
 }
 
 void Solver::SourceTerm()
@@ -426,7 +446,7 @@ void Solver::SourceTerm()
 	for (int i = 1; i < ib2; ++i)
 	{
 		da = 0.5 * (a[i + 1] - a[i - 1]);
-		rhs[1][i] = rhs[1][i] - p[i] * da;
+		rhs[RHO_U_A][i] = rhs[RHO_U_A][i] - p[i] * da;
 	}
 }
 
@@ -438,9 +458,8 @@ void Solver::ImplResidualSmooth()
 
 	eps2 = 2. * eps_impl_res_smooth + 1.;
 	d[0] = 0.;
-	rhs[0][0] = 0.;
-	rhs[1][0] = 0.;
-	rhs[2][0] = 0.;
+	for (int eq = 0; eq < eq_num; ++eq) 
+		rhs[eq][0] = 0.;
 
 	// elimination step
 
@@ -448,9 +467,9 @@ void Solver::ImplResidualSmooth()
 	{
 		t = 1. / (eps2 - eps_impl_res_smooth * d[i - 1]);
 		d[i] = t * eps_impl_res_smooth;
-		rhs[0][i] = t * (rhs[0][i] + eps_impl_res_smooth * rhs[0][i - 1]);
-		rhs[1][i] = t * (rhs[1][i] + eps_impl_res_smooth * rhs[1][i - 1]);
-		rhs[2][i] = t * (rhs[2][i] + eps_impl_res_smooth * rhs[2][i - 1]);
+		for (int eq = 0; eq < eq_num; ++eq)
+			rhs[eq][i] = t * (rhs[eq][i] + eps_impl_res_smooth * rhs[eq][i - 1]);
+			
 	}
 
 	// backward substitution
@@ -459,9 +478,10 @@ void Solver::ImplResidualSmooth()
 	for (int ii = 2; ii < ib2; ++ii)
 	{
 		i = i - 1;
-		rhs[0][i] = rhs[0][i] + d[i] * rhs[0][i + 1];
-		rhs[1][i] = rhs[1][i] + d[i] * rhs[1][i + 1];
-		rhs[2][i] = rhs[2][i] + d[i] * rhs[2][i + 1];
+
+		for (int eq = 0; eq < eq_num; ++eq)
+			rhs[eq][i] = rhs[eq][i] + d[i] * rhs[eq][i + 1];
+
 	}
 }
 
@@ -479,15 +499,15 @@ double Solver::Convergence()
 
 	for (int i = 1; i < ib2; ++i)
 	{
-		dr = cv[0][i] - cvold[0][i];
-		avms = avms + cv[1][i];
+		dr = cv[RHO_A][i] - cvold[RHO_A][i];
+		avms = avms + cv[RHO_U_A][i];
 		drho = drho + dr * dr;
 		if (abs(dr) >= drmax) {
 			drmax = abs(dr);
 			idrho = i;
 		}
-		rho = cv[0][i] / a[i];
-		u = cv[1][i] / cv[0][i];
+		rho = fv[RHO][i];		// cv[RHO_A][i] / a[i];
+		u = fv[U][i];			// cv[RHO_U_A][i] / cv[RHO_A][i];
 		c = sqrt(gamma* p[i] / rho);
 		if (u > c) nsup++;
 	}
@@ -525,13 +545,13 @@ void Solver::PrintResult()
 	fprintf(file, "x\tA\trho\tu\tp\tT\tM\tmass_flow\n");
 	for (int i = 1; i < ib2; ++i)
 	{
-		rho = cv[0][i] / a[i];
-		u = cv[1][i] / cv[0][i];
+		rho = fv[RHO][i]; // cv[0][i] / a[i];
+		u = fv[U][i]; // cv[1][i] / cv[0][i];
 		temp = p[i] / (rgas * rho);
 		c = sqrt(gamma * p[i] / rho);
 		mach = abs(u) / c;
 		fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", 
-			x[i], a[i], rho, u, p[i], temp, mach, cv[1][i]);
+			x[i], a[i], rho, u, p[i], temp, mach, cv[RHO_U_A][i]);
 	}
 }
 
@@ -549,6 +569,94 @@ void Solver::HideOutput()
 {
 	NoOutput = true;
 }
+
+double Solver::CalcH(double p_, double Rho_, double U_)
+{
+	return gamma / (gamma - 1.) * p_ / Rho_ + 0.5 * U_ * U_;
+}
+
+Solver::equation::equation(string eq_name_, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_)
+{
+	eq_name = eq_name_;
+	dt_var = vars_[dt_term_];
+	cur_dt = dt_term(dt_term_, vars_o_);
+	cur_dx = dx_term(dx_term_, vars_o_);
+}
+vector < vector < int > > Solver::equation::dt_term(string dt_term_, map < string, int > vars_o)
+{
+	vector < vector < int > > cur_dt;
+	int cur_pos = 0;
+	int id = 0;
+
+	if (dt_term_.find_first_of("E") != string::npos) {
+		dt_term_[dt_term_.find_first_of("E")] = 'H';
+	}
+
+	cur_dt.push_back(vector < int >());
+
+	while (cur_pos < dt_term_.size()) {
+		if (dt_term_.find_first_of("(") == cur_pos ||
+			dt_term_.find_first_of(")") == cur_pos ||
+			dt_term_.find_first_of("A") == cur_pos) {
+			cur_pos++;
+			if (cur_pos >= dt_term_.size()) {
+				break;
+			}
+		}
+		if (dt_term_.find_first_of("+") == cur_pos) {
+			cur_dt.push_back(vector < int >());
+			id++;
+			cur_pos++;
+		}
+		for (auto it = vars_o.begin(); it != vars_o.end(); ++it)
+		{
+			if (dt_term_.find_first_of(it->first, cur_pos) == cur_pos) {
+				cur_dt[id].push_back(it->second);
+				cur_pos += (it->first).size();
+				break;
+			}
+		}
+	}
+
+	return cur_dt;
+}
+
+vector < vector < int > > Solver::equation::dx_term(string dx_term_, map < string, int > vars_o)
+{
+	vector < vector < int > > cur_dx;
+	int cur_pos = 0;
+	int id = 0;
+
+	cur_dx.push_back(vector < int >());
+
+	while (cur_pos < dx_term_.size()) {
+		if (dx_term_.find_first_of("(") == cur_pos ||
+			dx_term_.find_first_of(")") == cur_pos ||
+			dx_term_.find_first_of("A") == cur_pos) {
+			cur_pos++;
+			if (cur_pos >= dx_term_.size()) {
+				break;
+			}
+		}
+		if (dx_term_.find_first_of("+") == cur_pos) {
+			cur_dx.push_back(vector < int >());
+			id++;
+			cur_pos++;
+
+		}
+		for (auto it = vars_o.begin(); it != vars_o.end(); ++it)
+		{
+			if (dx_term_.find_first_of(it->first, cur_pos) == cur_pos) {
+				cur_dx[id].push_back(it->second);
+				cur_pos += (it->first).size();
+				break;
+			}
+		}
+	}
+
+	return cur_dx;
+}
+
 
 Solver* CreateReadConfigFile(string file_name)
 {

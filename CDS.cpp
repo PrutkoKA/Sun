@@ -150,7 +150,17 @@ void CDS::Fluxes()
 	}
 }
 
+void CDS::RHS(int i)
+{
+
+}
+
 void CDS::LRState()
+{
+	// Do nothing
+}
+
+void CDS::LRState(string var_)
 {
 	// Do nothing
 }

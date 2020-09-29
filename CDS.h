@@ -20,7 +20,9 @@ public:
 	virtual const vector < double >& GetDissBlend();
 	virtual void Dissipation(double beta);
 	virtual void LRState();
+	virtual void LRState(string var_);
 	virtual void Fluxes();
+	virtual void RHS(int i);
 
 private:
 	vector < double > diss_blend;		///< dissipation blending coeffs for different stages
