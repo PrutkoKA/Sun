@@ -137,6 +137,15 @@ public:
 	vector < vector < double > > diss;
 	vector < vector < double > > rhs;
 
+	struct mass_matrix
+	{
+		vector < double > a_diagonal;
+		vector < double > b_diagonal;
+		vector < double > c_diagonal;
+	};
+
+	mass_matrix M_matrix;
+
 	vector < vector < double > > Q_star;
 
 	vector < double > a;			///< cross sections of tube
@@ -198,6 +207,8 @@ public:
 	void SetGrid(Loop& loop);
 	void InverseGrid();
 	void ShowGrid();
+
+	void calculate_mass_matrix();
 
 	void CalculateTimeSource(vector < vector < double > >& cvn_, vector < vector < double > >& cvnm1_, double physDt_);
 	void CalculateUnsteadyRHS(double physDt_);

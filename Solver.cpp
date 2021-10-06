@@ -546,6 +546,24 @@ void Solver::ShowGrid()
 	grid.ShowData();
 }
 
+void Solver::calculate_mass_matrix()
+{
+	M_matrix.a_diagonal.resize(ib2 - 1);
+	M_matrix.b_diagonal.resize(ib2 - 1);
+	M_matrix.c_diagonal.resize(ib2 - 1);
+	M_matrix.a_diagonal[ib2 - 2] = 0.25;
+	M_matrix.c_diagonal[0] = 0.25;
+	for (int i = 1; i < ib2; ++i)
+	{
+		M_matrix.b_diagonal[i - 1] = 0.75;
+		if (i > 1 && i < ib2 - 1)
+		{
+			M_matrix.a_diagonal[i - 1] = 0.25 * (x[i] - x[i - 1]) / (x[i + 1] - x[i - 1]);
+			M_matrix.c_diagonal[i - 1] = 0.25 * (x[i + 1] - x[i]) / (x[i + 1] - x[i - 1]);
+		}			
+	}
+}
+
 void Solver::CalculateTimeSource(vector < vector < double > >& cvn_, vector < vector < double > >& cvnm1_, double physDt_)
 {
 	for (int i = 1; i < ib2; ++i)
