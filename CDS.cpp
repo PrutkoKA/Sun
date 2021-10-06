@@ -61,32 +61,23 @@ void CDS::Dissipation(double beta)
 	// dissipation fluxes (at i+1/2)
 	for (int i = 0; i < ib2 + 1; ++i)
 	{
-		// if (direction > 0 || true) {
-			im1 = max(i - 1, 0);
-			ip1 = min(i + 1, imax - 1);
-			ip2 = min(i + 2, imax - 1);
-		// } else {
-		// 	im1 = min(i + 1, imax - 1);
-		// 	ip1 = max(i - 1, 0);
-		// 	ip2 = max(i - 2, 0);
-		// }
+		im1 = max(i - 1, 0);
+		ip1 = min(i + 1, imax - 1);
+		ip2 = min(i + 2, imax - 1);
+
 		eval = 0.5 * (vol[i] / dt[i] + vol[ip1] / dt[ip1]); // equation 4.56 - scaling factor
 		pmax = max(dp[i], dp[ip1]);
 		eps2 = eval * vis2 * pmax;
 		eps4 = eval * vis4;
 		eps4 = max(0., eps4 - eps2);
-		d[0 * imax + i] = eps2 * (cv[0][ip1] - cv[0][i]) -
-				  eps4 * (cv[0][ip2] - 3. * cv[0][ip1] + 3. * cv[0][i] - cv[0][im1]);
+		for (int eq = 0; eq < eq_num; ++eq)
+			d[eq * imax + i] = eps2 * (cv[eq][ip1] - cv[eq][i]) -
+				eps4 * (cv[eq][ip2] - 3. * cv[eq][ip1] + 3. * cv[eq][i] - cv[eq][im1]);
 
-		d[1 * imax + i] = eps2 * (cv[1][ip1] - cv[1][i]) -
-				  eps4 * (cv[1][ip2] - 3. * cv[1][ip1] + 3. * cv[1][i] - cv[1][im1]);
-
-		d[2 * imax + i] = eps2 * (cv[2][ip1] - cv[2][i]) -
-				  eps4 * (cv[2][ip2] - 3. * cv[2][ip1] + 3. * cv[2][i] - cv[2][im1]);	
 	}
 	
 	beta1 = 1. - beta;
-	offset = 1;// * direction;
+	offset = 1;
 	for (int i = 1; i < ib2; ++i)
 	{
 		if (i == 1 || i == ib2 - 1 || true) {
@@ -99,9 +90,9 @@ void CDS::Dissipation(double beta)
 			a_ = a_ / fac * 2.;
 			b_ = b_ / fac * 2.;
 		}
-		diss[0][i] = offset*beta * (b_ * d[0 * imax + i] - a_ * d[0 * imax + i - offset]) + beta1 * diss[0][i];
-		diss[1][i] = offset*beta * (b_ * d[1 * imax + i] - a_ * d[1 * imax + i - offset]) + beta1 * diss[1][i];
-		diss[2][i] = offset*beta * (b_ * d[2 * imax + i] - a_ * d[2 * imax + i - offset]) + beta1 * diss[2][i];
+		for (int eq = 0; eq < eq_num; ++eq)
+			diss[eq][i] = offset * beta * (b_ * d[eq * imax + i] - a_ * d[eq * imax + i - offset]) + beta1 * diss[eq][i];
+
 	}
 }
 
@@ -109,18 +100,17 @@ void CDS::Fluxes()
 {
 	double si, rav, ruav, reav, pav, rhav, qs;
 	double* f = dummy.data();
-	int offset = 1;// * direction;
+	int offset = 1;
 	double fac, a_, b_;
-	// double sign_ (GetInflowId() < GetOutflowId() ? 1. : -1.);
 
 	// flux term (average of variables)
 
-	for (int i = 0; i < ib2 + 1; ++i)
+	for (int i = 0; i < ib2 + 1*0; ++i)
 	{
 		si = 0.5 * (a[i + 1] + a[i]);
-		rav = 0.5 * (cv[0][i + 1] / a[i + 1] + cv[0][i] / a[i]);
-		ruav = 0.5 * (cv[1][i + 1] / a[i + 1] + cv[1][i] / a[i]);
-		reav = 0.5 * (cv[2][i + 1] / a[i + 1] + cv[2][i] / a[i]);
+		rav = 0.5 * (cv[RHO_A][i + 1] / a[i + 1] + cv[RHO_A][i] / a[i]); //(fv[RHO][i + i] + fv[RHO][i]); // (cv[0][i + 1] / a[i + 1] + cv[0][i] / a[i]);
+		ruav = 0.5 * (cv[RHO_U_A][i + 1] / a[i + 1] + cv[RHO_U_A][i] / a[i]);
+		reav = 0.5 * (cv[RHO_E_A][i + 1] / a[i + 1] + cv[RHO_E_A][i] / a[i]);
 		pav = 0.5 * (p[i + 1] + p[i]);
 		rhav = reav + pav;
 		qs = ruav * si / rav;
@@ -144,13 +134,65 @@ void CDS::Fluxes()
 			a_ = a_ / fac * 2.;
 			b_ = b_ / fac * 2.;
 		}
-		rhs[0][i] = offset*(b_ * f[0 * imax + i] - a_ * f[0 * imax + i - offset]) - diss[0][i];
-		rhs[1][i] = offset*(b_ * f[1 * imax + i] - a_ * f[1 * imax + i - offset]) - diss[1][i];
-		rhs[2][i] = offset*(b_ * f[2 * imax + i] - a_ * f[2 * imax + i - offset]) - diss[2][i];
+		for (int eq = 0; eq < eq_num; ++eq)
+			rhs[eq][i] = offset * (b_ * f[eq * imax + i] - a_ * f[eq * imax + i - offset]) - diss[eq][i];
+
 	}
 }
 
 void CDS::RHS(int i)
+{
+	double si, rav, ruav, reav, pav, rhav, qs;
+	double* f = dummy.data();
+	int offset = 1;
+	double fac, a_, b_;
+	double term_;
+	bool U_IS_PRESENT;
+
+	// flux term (average of variables)
+
+	for (int i = 0; i < ib2 + 1*0; ++i)
+	{
+		si = 0.5 * (a[i + 1] + a[i]);
+
+		for (int eq = 0; eq < eq_num; ++eq) {
+			vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+			f[eq * imax + i] = 0;		// Flux Convective AVerage
+			for (int id = 0; id < cur_dx.size(); ++id) 
+			{
+				term_ = 1.;
+				for (auto var : cur_dx[id]) 
+					term_ *= 0.5 * (fv[var][i + 1] + fv[var][i]);
+
+				term_ *= si;
+				f[eq * imax + i] += term_;
+			}
+		}
+	}
+
+	// flux + dissipation = RHS
+
+	for (int i = 1; i < ib2; ++i)
+	{
+		if (i == 1 || i == ib2 - 1 || true) {
+			a_ = 1.;
+			b_ = 1.;
+		}
+		else {
+			a_ = 1. / (x[i] - x[i - 1]);
+			b_ = 1. / (x[i + 1] - x[i]);
+			fac = a_ + b_;
+			a_ = a_ / fac * 2.;
+			b_ = b_ / fac * 2.;
+		}
+		for (int eq = 0; eq < eq_num; ++eq)
+			rhs[eq][i] = offset * (b_ * f[eq * imax + i] - a_ * f[eq * imax + i - offset]) - diss[eq][i];
+
+	}
+}
+
+void CDS::ComputeRHSandJacobian(bool NO_JAC)
 {
 
 }
@@ -164,3 +206,11 @@ void CDS::LRState(string var_)
 {
 	// Do nothing
 }
+
+void CDS::LRState(vector < vector < double > >& cv_, vector < vector < double > >& ls_, vector < vector < double > >& rs_)
+{
+	// Do nothing
+}
+
+void CDS::GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple)
+{}

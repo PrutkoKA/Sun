@@ -1,0 +1,44 @@
+solver: hlle
+gas: Ideal
+Cp: 1005
+gamma: 1.4
+cfl: 0.5
+
+lts: true                  # local time step: false ? true ?
+ERK: 5_4                    # Explicit Runge-Kutta Scheme (stage, order)    5_2, 5_3, 5_4
+IRK: 4_5                    # Implicit Runge-Kutta Scheme (stage, order, variant)   3_3, 3_4_1, 3_4_2, 6_4, 4_5, 11_5, 6_6
+TSRK: 5_5                   # Two Step Runge-Kutta Scheme (stage, order) 5_5, 8_5
+
+#max_iter_num: 1          # 100000
+#tolerance: 1e-2
+time_treat: explicit        # implicit, explicit
+steadiness: steady
+
+max_iter_num: 50000
+tolerance: 1e-5
+
+RK_stage_coeffs: [0.25, 0.1667, 0.375, 0.5, 1.]
+res_smooth_flag: [1, 1, 1, 1, 1]
+eps_impl_res_smooth: 0.8
+
+cds:
+  diss_blend: [1.00  , 0.00  , 0.56  , 0.00  , 0.44]
+  diss_flag: [1, 0, 1, 0, 1]
+  vis2: 0.7
+  vis4: 64
+
+ERKC_5_4:
+    alpha: [                 # Sigal (5, 4) RK       cfl = 8     (When residual smoothing is 0.8)
+        [1, 0, 0, 0, 0],
+        [0.444370493651235, 0.555629506348765, 0, 0, 0],
+        [0.620101851488403, 0, 0.379898148511597, 0, 0],
+        [0.178079954393132, 0, 0, 0.821920045606868, 0],
+        [0, 0, 0.517231671970585, 0.096059710526147, 0.386708617503269]
+    ]
+    beta: [
+        [0.391752226571890, 0, 0, 0, 0],
+        [0, 0.368410593050371, 0, 0, 0],
+        [0, 0, 0.251891774271694, 0, 0],
+        [0, 0, 0, 0.544974750228521, 0],
+        [0, 0, 0, 0.063692468666290, 0.226007483236906]
+    ]

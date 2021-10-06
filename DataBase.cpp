@@ -57,7 +57,7 @@ void DataBase::SetRow(string col_name, double value)
 	SetRow(col_name, values);
 }
 
-void DataBase::SetRow(string col_name, vector < double > values)
+void DataBase::SetRow(string col_name, vector < double > values)		// Column may be???
 {
 	Data[columns[col_name]] = values;
 }

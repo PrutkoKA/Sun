@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Loop.h"
+//#include "Loop.h"
+#include "Solver.h"
 
 //double gamma;
 //double cpgas;
@@ -34,6 +35,10 @@ void Laval3();
 void Laval4();
 
 void Laval5();
+
+void Laval6();
+
+void Laval7();
 
 void Laval();
 

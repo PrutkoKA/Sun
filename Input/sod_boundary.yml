@@ -1,4 +1,4 @@
-type: dirichlet
+type: transmissive
 first:
 #last:
   inflow:

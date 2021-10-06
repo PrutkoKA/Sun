@@ -1,0 +1,7 @@
+solvers:
+	- cds:
+	  gas: Ideal
+	  Cp:  1005
+	  cfl: 0.5
+	  max_iter_num: 50000
+	  tolerance:    1e-5

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "Solver.h"
+//#include "adept/adept_source.h"
 
 struct cds_struct
 {
@@ -21,8 +22,12 @@ public:
 	virtual void Dissipation(double beta);
 	virtual void LRState();
 	virtual void LRState(string var_);
+	virtual void LRState(vector < vector < double > >& cv_, vector < vector < double > >& ls_, vector < vector < double > >& rs_);
 	virtual void Fluxes();
 	virtual void RHS(int i);
+	virtual void ComputeRHSandJacobian(bool NO_JAC = false);
+	virtual void GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple = false);
+
 
 private:
 	vector < double > diss_blend;		///< dissipation blending coeffs for different stages

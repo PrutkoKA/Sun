@@ -1,4 +1,3 @@
-// Central Differences Scheme
 
 #include "CUSP.h"
 
@@ -107,6 +106,11 @@ void CUSP::LRState(string var_)
 		}
 	}
 
+}
+
+void CUSP::LRState(vector < vector < double > >& cv_, vector < vector < double > >& ls_, vector < vector < double > >& rs_)
+{
+	// Do nothing
 }
 
 // CUSPLIM = original CUSP (SLIP) limiter (Eq. (4.121))
@@ -238,7 +242,7 @@ void CUSP::RHS(int i)
 			h1 = 2. * machn + 1.;
 			bfac = min(0., h1);
 		} else {
-			bfac = Sign(h1);
+			bfac = Sign(machn);
 		}
 
 		afac = abs(uav) - bfac * uav;
@@ -292,6 +296,230 @@ void CUSP::RHS(int i)
 	}
 }
 
+void CUSP::ComputeRHSandJacobian(bool NO_JAC)
+{
+	vector < double > fluxp(eq_num);
+	vector < double > fluxn(eq_num);
+	vector < double > source(eq_num);
+	vector < double > jac(eq_num * eq_num);
+	double si;
+	//bool SGS(L_SGS.size() > 0);
+
+	ResetDummy();
+	for (int i = 0; i < ib2; ++i) {
+		si = 0.5 * (a[i] + a[i + 1]);
+		GetPositiveFluxAndJacobian(i, fluxp, jac);
+		if (/*SGS && */!time_expl && !NO_JAC)
+			FillJacobian(L_SGS[i], jac, si);
+
+		GetNegativeFluxAndJacobian(i, fluxn, jac);
+		if (/*SGS && */!time_expl && !NO_JAC)
+			FillJacobian(U_SGS[i], jac, si);
+
+		SetFluxes(i, fluxp, fluxn);
+
+		GetSourceAndJacobian(i, source, jac);
+		if (/*SGS && */!time_expl && !NO_JAC)
+			FillJacobian(D_SGS[i], jac, si);
+	}
+	SetRHS();
+}
+
+void CUSP::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
+{
+	vector < double > x_val(eq_num);
+	double gamma_ = GetGamma();
+
+	x_val[RHO_A] = fv[RHO][i];
+	x_val[RHO_U_A] = fv[RHO][i] * fv[U][i];
+	x_val[RHO_E_A] = (fv[P][i] / (gamma_ - 1.) + 0.5 * fv[RHO][i] * pow(fv[U][i], 2));
+
+	vector<adept::adouble> x(eq_num);
+	adept::set_values(&x[0], eq_num, x_val.data());
+	stack.new_recording();
+	vector<adept::adouble> y(eq_num);
+	ComputeSourceTerm(eq_num, &x[0], eq_num, &y[0], i);
+	if (!time_expl) {
+		stack.independent(&x[0], eq_num);
+		stack.dependent(&y[0], eq_num);
+		stack.jacobian(jac.data());
+	}
+	for (int iy = 0; iy < eq_num; ++iy)
+		y_val[iy] = y[iy].value();
+}
+
+void CUSP::ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adouble* source, int i)
+{
+	using adept::adouble;
+
+	double da, dx;
+	adouble r, u, p;
+	double gamma_ = GetGamma();
+
+	r = cv[RHO_A];
+	u = cv[RHO_U_A] / cv[RHO_A];
+	p = (gamma_ - 1.) * (cv[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
+
+	da = 0.5 * (a[i + 1] - a[max(i - 1, 0)]);
+	dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
+	source[0] = 0.;
+	source[1] = p * da / dx;
+	source[2] = 0.;
+	//rhs[RHO_U_A][i] = rhs[RHO_U_A][i] - p[i] * da;
+}
+
+void CUSP::SetRHS()
+{
+	//double da;
+
+	// sum of fluxes = RHS
+	for (int i = 1; i < ib2; ++i)
+	{
+		//da = 0.5 * (a[i + 1] - a[i - 1]);
+		for (int eq = 0; eq < eq_num; ++eq) {
+			int dt_var = equations[eq].dt_var;
+
+			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+			/*if (dt_var == RHO_U_A)
+				rhs[dt_var][i] = rhs[dt_var][i] - p[i] * da;*/
+		}
+		SourceTerm(i);
+	}
+}
+
+void CUSP::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
+{
+	vector < double > x_val(eq_num);
+	double gamma_ = GetGamma();
+
+	x_val[RHO_A] = ls[RHO][i];
+	x_val[RHO_U_A] = ls[RHO][i] * ls[U][i];
+	x_val[RHO_E_A] = (ls[P][i] / (gamma_ - 1.) + 0.5 * ls[RHO][i] * pow(ls[U][i], 2));
+	//adept::Stack stack;
+	vector<adept::adouble> x(eq_num);
+	adept::set_values(&x[0], eq_num, x_val.data());
+	stack.new_recording();
+	vector<adept::adouble> y(eq_num);
+	ComputePositiveFlux(eq_num, &x[0], eq_num, &y[0], i);
+	if (!time_expl) {
+		stack.independent(&x[0], eq_num);
+		stack.dependent(&y[0], eq_num);
+		stack.jacobian(jac.data());
+	}
+	for (int iy = 0; iy < eq_num; ++iy)
+		y_val[iy] = y[iy].value();
+}
+
+void CUSP::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
+{
+	vector < double > x_val(eq_num);
+	double gamma_ = GetGamma();
+
+	x_val[RHO_A] = rs[RHO][i];
+	x_val[RHO_U_A] = rs[RHO][i] * rs[U][i];
+	x_val[RHO_E_A] = (rs[P][i] / (gamma_ - 1.) + 0.5 * rs[RHO][i] * pow(rs[U][i], 2));
+	//adept::Stack stack;
+	vector<adept::adouble> x(eq_num);
+	adept::set_values(&x[0], eq_num, x_val.data());
+	stack.new_recording();
+	vector<adept::adouble> y(eq_num);
+	ComputeNegativeFlux(eq_num, &x[0], eq_num, &y[0], i);
+	if (!time_expl) {
+		stack.independent(&x[0], eq_num);
+		stack.dependent(&y[0], eq_num);
+		stack.jacobian(jac.data());
+	}
+	for (int iy = 0; iy < eq_num; ++iy)
+		y_val[iy] = y[iy].value();
+}
+
+void CUSP::ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcav, int i, int direction)
+{
+	using adept::adouble;
+
+	adouble r, u, p_, h;
+	//double dr, du, dp_, dh;
+	double rav, uav, pav, cav, machn, h1;
+	double bfac, afac;
+	//double rr, ur, pr, hr, cr, machr, MpL, MmR, M;
+	double gamma_ = GetGamma();
+	double sign_(Sign(-direction));
+
+	r = x[RHO_A];
+	u = x[RHO_U_A] / x[RHO_A];
+	p_ = (gamma_ - 1.) * (x[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
+	h = gamma_ / (gamma_ - 1.) * p_ / r + 0.5 * pow(u, 2);
+
+	/*dr = r.value();
+	du = u.value();
+	dp_ = p_.value();
+	dh = h.value();*/
+
+	// average of left convective fluxe
+	fcav[0] = 1. * (r * u);
+	fcav[1] = 1. * (r * u * u + p_);
+	fcav[2] = 1. * (r * u * h);
+
+	// dissipative fluxes
+
+	rav = 0.5 * (cv[0][i + 1] / a[i + 1] + cv[0][i] / a[i]);
+	uav = 0.5 * (cv[1][i + 1] / cv[0][i + 1] + cv[1][i] / cv[0][i]);
+	pav = 0.5 * (p[i + 1] + p[i]);
+	cav = sqrt(gamma_ * pav / rav);
+	machn = (uav) / cav;
+
+	if (machn >= 0. && machn < 1.) {
+		h1 = 2. * machn - 1.;
+		bfac = max(0., h1);
+	}
+	else if (machn > -1. && machn < 0.) {
+		h1 = 2. * machn + 1.;
+		bfac = min(0., h1);
+	}
+	else {
+		bfac = Sign(machn);
+	}
+
+	afac = abs(uav) - bfac * uav;
+
+	fcav[0] -= 1. * sign_ * (afac * (r) + bfac * (u * r));
+	fcav[1] -= 1. * sign_ * (afac * (r * u) + bfac * (r * u * u + p_));
+	fcav[2] -= 1. * sign_ * (afac * (r * h) + bfac * (r * u * h));
+	/*if (direction > 0) {
+		fcav[0] -= 0.5 * (afac * (rs[RHO][i] - r) + bfac * (rs[U][i] * rs[RHO][i] - u * r));
+		fcav[1] -= 0.5 * (afac * (rs[RHO][i] * rs[U][i] - r * u) + bfac * (rs[RHO][i] * rs[U][i] * rs[U][i] - r * u * u + rs[P][i] - p_));
+		fcav[2] -= 0.5 * (afac * (rs[RHO][i] * rs[H][i] - r * h) + bfac * (rs[RHO][i] * rs[U][i] * rs[H][i] - r * u * h));
+	}
+	else {
+		fcav[0] += 0.5 * (afac * (ls[RHO][i] - r) + bfac * (ls[U][i] * ls[RHO][i] - u * r));
+		fcav[1] += 0.5 * (afac * (ls[RHO][i] * ls[U][i] - r * u) + bfac * (ls[RHO][i] * ls[U][i] * ls[U][i] - r * u * u + ls[P][i] - p_));
+		fcav[2] += 0.5 * (afac * (ls[RHO][i] * ls[H][i] - r * h) + bfac * (ls[RHO][i] * ls[U][i] * ls[H][i] - r * u * h));
+	}*/
+	/*dummy[0 * imax + i] -= 0.5 * sign_ * (afac * r.value() + bfac * u.value() * r.value());
+	dummy[1 * imax + i] -= 0.5 * sign_ * (afac * r.value() * u.value() + bfac * (r.value() * u.value() * u.value() + p_.value()));
+	dummy[2 * imax + i] -= 0.5 * sign_ * (afac * r.value() * h.value() + bfac * r.value() * u.value() * h.value());*/
+}
+
+void CUSP::ComputePositiveFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i)
+{
+	ComputeFlux(n, x, m, fcavp, i, 1);
+}
+
+void CUSP::ComputeNegativeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavn, int i)
+{
+	ComputeFlux(n, x, m, fcavn, i, -1);
+}
+
+void CUSP::SetFluxes(int i, vector < double >& fluxp, vector < double >& fluxn)
+{
+	double si = 0.5 * (a[i + 1] + a[i]);
+
+	for (int eq = 0; eq < eq_num; ++eq) {
+		//dummy[eq * imax + i] *= si;
+		dummy[eq * imax + i] += 0.5*(fluxp[eq] + fluxn[eq]) * si;
+	}
+}
+
 const vector < int >& CUSP::GetDissFlag() 
 { 
 	return vector < int >(); 
@@ -303,3 +531,5 @@ const vector < double >& CUSP::GetDissBlend()
 }
 
 void CUSP::Dissipation(double beta) {}
+
+void CUSP:: GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple) {}
