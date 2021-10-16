@@ -44,44 +44,44 @@ void HLLE::LRState(string var_)
 	for (int i = 0; i < ib2; ++i)
 	{
 		for (int eq = 0; eq < var_num; ++eq) {
-			//if (eq != n) {
-				/*delt_l = MUSCL0(d1[eq * (imax + 1) + i], d1[eq * (imax + 1) + i - 1], x[i + 1] - x[i]);
-				delt_r = MUSCL0(d1[eq * (imax + 1) + i + 1], d1[eq * (imax + 1) + i], x[i + 1] - x[i]);*/
+			int offset = eq * (imax + 1);
 
-			double dfdx1, dfdx2;
-			double dx3, dx2, dx1, dx0;
-			dx2 = (x[i + 1] - x[i]);
-			dx1 = (x[i] - x[i - 1 > -1 ? i - 1 : 0]);
-			dfdx1 = d1[eq * (imax + 1) + i];
-			dfdx2 = d1[eq * (imax + 1) + i - 1];
-			dfdx1 = (dx2 > 0. ? dfdx1 / dx2 : 0.);
-			dfdx2 = (dx1 > 0. ? dfdx2 / dx1 : 0.);
-			delt_l = MUSCL0_new(dfdx1,
-								dfdx2,
-								dx1);
-			delt_l *= dx1;
+			enum class flux_side {left, right};
+			auto get_derivatives_dx = [&](int point, flux_side fs, double& dfdx1, double& dfdx2, double& dx) -> void
+			{
+				int i = fs == flux_side::left
+					  ? point
+					  : point + 1;
 
-			dx3 = (x[i + 2 < ib2 ? i + 2 : ib2 - 1] - x[i + 1]);
-			dx2 = (x[i + 1] - x[i]);
-			dfdx1 = d1[eq * (imax + 1) + i + 1];
-			dfdx2 = d1[eq * (imax + 1) + i];
-			dfdx1 = (dx3 > 0. ? dfdx1 / dx3 : 0.);
-			dfdx2 = (dx2 > 0. ? dfdx2 / dx2 : 0.);
-			delt_r = MUSCL0_new(dfdx1,
-								dfdx2,
-								dx1);
-			delt_r *= dx1;
+				double dx1 = (x[i] - x[			i - 1 > -1 ?
+										i - 1
+										  : 0]);
+				double dx2 = (x[				i + 2 < ib2 ?
+								i + 1 :
+								ib2 - 1] - x[i]);
 
-				rs[eq][i] = fv[eq][i + 1] - 0.5 * delt_r;
-				ls[eq][i] = fv[eq][i + 0] + 0.5 * delt_l;
-			//}
-			//else {
-			//	//rs[eq][i] =   0.5 * (fv[eq][i + 1] - grid.GetAlpha() * (grid.GetAlpha() + 1.) * (fv[eq][min(i + 1 + 1, ib2 - 1)] - 2. * fv[eq][i + 1] + fv[eq][i]))             / grid.GetResolution()[i + 1];
-			//	rs[eq][i] =   0.5 * (fv[eq][i] -     grid.GetAlpha() * (grid.GetAlpha() + 1.) * (fv[eq][i + 1]                   - 2. * fv[eq][i]     + fv[eq][max(i - 1, 0)])) / grid.GetResolution()[i];
-			//	ls[eq][i] =   0.5 * (fv[eq][i] -     grid.GetAlpha() * (grid.GetAlpha() + 1.) * (fv[eq][i + 1]                   - 2. * fv[eq][i]     + fv[eq][max(i - 1, 0)])) / grid.GetResolution()[i];
-			//	//rs[eq][i] = -(fv[eq][i] - grid.GetAlpha() * (grid.GetAlpha() + 1.) * (fv[eq][i + 1] - 2. * fv[eq][i] + fv[eq][max(i - 1, 0)])) / grid.GetResolution()[i];
-			//	//ls[eq][i] = (fv[eq][max(i - 1, 0)] - grid.GetAlpha() * (grid.GetAlpha() + 1.) * (fv[eq][i] - 2. * fv[eq][max(i - 1, 0)] + fv[eq][max(i - 2, 0)])) / grid.GetResolution()[max(i - 1, 0)];
-			//}
+				double df1 = d1[i - 1 + offset];
+				double df2 = d1[i + offset];
+
+				dfdx1 = (dx1 > 0. ? df1 / dx1 : 0.);
+				dfdx2 = (dx2 > 0. ? df2 / dx2 : 0.);
+				dx = fs == flux_side::left
+				   ? dx2
+				   : dx1;
+			};
+
+			double dfdx1, dfdx2, dx;
+			get_derivatives_dx(i, flux_side::left, dfdx1, dfdx2, dx);
+
+			delt_l = MUSCL0(dfdx1, dfdx2, dx);
+			delt_l *= dx;
+
+			get_derivatives_dx(i, flux_side::right, dfdx1, dfdx2, dx);
+			delt_r = MUSCL0(dfdx1, dfdx2, dx);
+			delt_r *= dx;
+
+			rs[eq][i] = fv[eq][i + 1] - 0.5 * delt_r;
+			ls[eq][i] = fv[eq][i + 0] + 0.5 * delt_l;
 		}
 		rs[2][i] = max(rs[2][i], 1e-20);
 		ls[2][i] = max(ls[2][i], 1e-20);
