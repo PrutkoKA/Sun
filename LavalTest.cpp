@@ -208,6 +208,8 @@ void Laval4()	// Examining non-uniform grid (Central scheme)
 	central_s->RefreshBoundaries();
 
 	central_s->calculate_mass_matrix();
+	central_s->fill_inverse_mass_matrix();
+	//central_s->print_inversed_mass_matrix();
 
 	// convtol = 1e-5;
 	for (int iter = 0; iter < maxiter && drho > convtol; ++iter)

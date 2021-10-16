@@ -13,6 +13,8 @@
 
 #include "Loop.h"
 
+#include "mass_matrix.h"
+
 #include "Eigen/Dense"
 
 #include <functional>
@@ -137,13 +139,6 @@ public:
 	vector < vector < double > > diss;
 	vector < vector < double > > rhs;
 
-	struct mass_matrix
-	{
-		vector < double > a_diagonal;
-		vector < double > b_diagonal;
-		vector < double > c_diagonal;
-	};
-
 	mass_matrix M_matrix;
 
 	vector < vector < double > > Q_star;
@@ -208,7 +203,9 @@ public:
 	void InverseGrid();
 	void ShowGrid();
 
-	void calculate_mass_matrix();
+	void calculate_mass_matrix() { M_matrix.calculate_mass_matrix(++x.begin(), --x.end(), x.size() - 2); };
+	void fill_inverse_mass_matrix() { M_matrix.fill_inverse_mass_matrix(); }
+	void print_inversed_mass_matrix() { M_matrix.print_inverse_matrix(); }
 
 	void CalculateTimeSource(vector < vector < double > >& cvn_, vector < vector < double > >& cvnm1_, double physDt_);
 	void CalculateUnsteadyRHS(double physDt_);

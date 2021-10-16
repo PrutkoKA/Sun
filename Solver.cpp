@@ -546,24 +546,6 @@ void Solver::ShowGrid()
 	grid.ShowData();
 }
 
-void Solver::calculate_mass_matrix()
-{
-	M_matrix.a_diagonal.resize(ib2 - 1);
-	M_matrix.b_diagonal.resize(ib2 - 1);
-	M_matrix.c_diagonal.resize(ib2 - 1);
-	M_matrix.a_diagonal[ib2 - 2] = 0.25;
-	M_matrix.c_diagonal[0] = 0.25;
-	for (int i = 1; i < ib2; ++i)
-	{
-		M_matrix.b_diagonal[i - 1] = 0.75;
-		if (i > 1 && i < ib2 - 1)
-		{
-			M_matrix.a_diagonal[i - 1] = 0.25 * (x[i] - x[i - 1]) / (x[i + 1] - x[i - 1]);
-			M_matrix.c_diagonal[i - 1] = 0.25 * (x[i + 1] - x[i]) / (x[i + 1] - x[i - 1]);
-		}			
-	}
-}
-
 void Solver::CalculateTimeSource(vector < vector < double > >& cvn_, vector < vector < double > >& cvnm1_, double physDt_)
 {
 	for (int i = 1; i < ib2; ++i)
@@ -1100,22 +1082,7 @@ void Solver::New_Steady_UnsteadyDualTime_CV(vector < vector < vector < double > 
 
 				cv[eq][i] += RK_alpha[rks][stage] * cvstage[stage][eq][i];
 			}
-			auto find_lower_index = [&] (int x_index) -> int {
-				int y_index = x_index;
-				if (x[x_index] == y[x_index])
-					return x_index;
-				while (x[x_index] < y[y_index] && y_index > 0)
-					--y_index;
-				while (y_index < y.size() - 1 && y[y_index + 1] <= x[x_index])
-					++y_index;
-				return y_index;
-			};
-			int y_ind = find_lower_index(i);
-			if (x[i] == y[y_ind])
-				cv[eq][i] -= rhs[eq][i];		// Calculating of conservative variables (Eq. 6.7)
-			else
-				cv[eq][i] -= (y[y_ind + 1] - x[i]) / (y[y_ind + 1] - y[y_ind]) * rhs[eq][y_ind]
-						   + (x[i] - y[y_ind])     / (y[y_ind + 1] - y[y_ind]) * rhs[eq][y_ind + 1];
+			cv[eq][i] -= rhs[eq][i];		// Calculating of conservative variables (Eq. 6.7)
 		}
 		UpdateP(i);
 	}
