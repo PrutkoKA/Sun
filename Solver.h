@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <numeric>
 #include <string>
 #include <set>
 #include "yaml-cpp/yaml.h"

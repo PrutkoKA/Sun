@@ -1073,6 +1073,13 @@ void Solver::RHSProcessing(vector < vector < vector < double > > >& rhsstage, in
 
 void Solver::New_Steady_UnsteadyDualTime_CV(vector < vector < vector < double > > >& cvstage, int rks)
 {
+	auto scalar_prod = [](const vector < double >::const_iterator& vec1, const vector < double >::const_iterator& vec2, int size) -> double
+	{
+		vector <double> prods(size);
+		std::transform(vec1, vec1 + size, vec2, prods.begin(), std::multiplies<double>());
+		return std::accumulate(prods.begin(), prods.end(), 0.);
+	};
+
 	for (int i = 1; i < ib2; ++i)
 	{
 		for (int eq = 0; eq < eq_num; ++eq) {
@@ -1082,7 +1089,10 @@ void Solver::New_Steady_UnsteadyDualTime_CV(vector < vector < vector < double > 
 
 				cv[eq][i] += RK_alpha[rks][stage] * cvstage[stage][eq][i];
 			}
-			cv[eq][i] -= rhs[eq][i];		// Calculating of conservative variables (Eq. 6.7)
+			if (steadiness)
+				cv[eq][i] -= rhs[eq][i];		// Calculating of conservative variables (Eq. 6.7)
+			else
+				cv[eq][i] -= scalar_prod(rhs[eq].begin() + 1, M_matrix.inversed_mass_matrix[i - 1].begin(), ib2 - 1);
 		}
 		UpdateP(i);
 	}
