@@ -29,6 +29,7 @@ public:
 	void RefreshN(string col_name);
 	void CalculateResolution(double X, double F, string function_name, string x_name);
 	void CalculateConcentration(double X, string x_name);
+	vector <double>& GetConcentrationRef() { return n; };
 	void CalculateConcentrationWave();
 	SparseMatrix< double > ILU_0(SparseMatrix< double >& SM);
 	Vector SolveFromLU(SparseMatrix<double>& LU, Vector& b);
@@ -40,6 +41,7 @@ public:
 	vector< double > RefineMesh();
 	void FindMesh(double dt, string x_name);
 	void SmoothN(double coef);
+	const vector < double > smooth_least_square (const vector < double > x, const vector < double > f, unsigned int poly_degree, unsigned int half_count_points);
 	void AddCollumnR();
 	void AddCollumnN();
 

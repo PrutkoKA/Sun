@@ -170,7 +170,7 @@ public:
 
 	void SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
 
-	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_);
+	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, bool smooth);
 
 	void ReadBoundaries(string file_name);		///< Reading Boundary file
 	void InitFlow(double rho, double mass, double e, double p2);

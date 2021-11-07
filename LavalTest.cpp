@@ -506,11 +506,16 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	// cusp_s->InverseGrid();
 	cusp_s->InitFlowAG(rho_, mass_, e_, p_, 0.3);
 
-	for (int i = 0; i < 1; ++i) {
-		cusp_s->AdjustMesh(rho_, mass_, e_, p_, 0.3);
+	// Parameters to adjust mesh were used
+	for (int i = 0; i < 1000; ++i) {
+		cusp_s->AdjustMesh(rho_, mass_, e_, p_, 0.3, i % 15 == 0);
 	}
 	cusp_s->CalculateVolumes();
 	cusp_s->grid.SetRow("volume", cusp_s->vol);
+	//cusp_s->grid.RefreshR("R");
+	//cusp_s->grid.RefreshN("n");
+	cusp_s->grid.PrintTable("Output/RemeshedGrid.txt");
+	return;
 
 	cusp_s->RhoUPH();
 	cusp_s->RefreshBoundaries();

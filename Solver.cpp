@@ -999,7 +999,7 @@ double Solver::SolveExplImpl(double physDt)
 	return Convergence();
 }
 
-void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_)
+void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, bool smooth)
 {
 	InitFlowAG2(rho_, mass_, e_, p_, x_);
 
@@ -1010,13 +1010,26 @@ void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, dou
 	grid.CalculateResolution(1., 1., "rho", "coordinate");
 	grid.CalculateConcentration(1., "coordinate");
 
+	std::vector<double> v(grid.GetConcentration().size());
+	std::iota(v.begin(), v.end(), 0.);
+	double coef = 0.0;
+	// Parameter to adjust mesh was used
+	for (int i = 0; i < 10 && smooth; ++i)
+	{
+		vector <double> smoothed_n = grid.smooth_least_square(/*grid.GetCoordinates()*/v, grid.GetConcentration(), 2, 2);
+		for (int j = 0; j < smoothed_n.size(); ++j)
+			grid.GetConcentrationRef()[j] = coef * grid.GetConcentrationRef()[j] + (1. - coef) * smoothed_n[j];
+	}
+	//grid.SmoothN(0.5);
+
+
 	x = grid.RefineMesh();
 
 	cv[RHO_A] = grid.GetValues("rho");
 	cv[RHO_U_A] = grid.GetValues("rhoU");
 	cv[RHO_E_A] = grid.GetValues("rhoE");
 
-	InitFlowAG2(rho_, mass_, e_, p_, 0.3);
+	InitFlowAG2(rho_, mass_, e_, p_, x_);
 
 	RefreshBoundaries();						// Refresh boundary conditions
 	RhoUPH();

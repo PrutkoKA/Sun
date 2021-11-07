@@ -57,13 +57,13 @@ int main()
 
 	// Laval3();
 
-	 Laval4();
+	 //Laval4();
 
 	//Laval5();
 
 	//Laval6();		// Unsteady
 
-	//Laval7();		// Unsteady + Frid
+	Laval7();		// Unsteady + Frid
 
 	//Grid();
 

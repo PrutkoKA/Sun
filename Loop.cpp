@@ -1,4 +1,5 @@
 #include "Loop.h"
+#include <numeric>
 
 vector< double > Loop::GetCoordinates()
 {
@@ -78,10 +79,10 @@ void Loop::CalculateResolution(double X, double F, string function_name, string 
 				R[i] += sqrt(1. + pow(X / F * (f[i + 1] - f[i]) / (x[i + 1] - x[i]), 2));
 				factor++;
 			}
-			if (x[i] - x[i - 1] > 0.) {
+			/*if (x[i] - x[i - 1] > 0.) {
 				R[i] += sqrt(1. + pow(X / F * (f[i] - f[i - 1]) / (x[i] - x[i - 1]), 2));
 				factor++;
-			}
+			}*/
 			R[i] /= factor;
 		}
 		else {
@@ -116,10 +117,10 @@ void Loop::CalculateConcentration(double X, string x_name)
 				n[i] += X / (x[i + 1] - x[i]);
 				factor++;
 			}
-			if (x[i] - x[i - 1] > 0.) {
+			/*if (x[i] - x[i - 1] > 0.) {
 				n[i] += X / (x[i] - x[i - 1]);
 				factor++;
-			}
+			}*/
 			n[i] /= factor;
 		}
 		else {
@@ -499,12 +500,15 @@ double Loop::dxSearch(double S_left, double conc_, int method, double slope, dou
 
 vector< double > Loop::RefineMesh()
 {
-	double tau = 0.;
+	double tau = 200.;
 	double d_t = 1.;
 	double t_frac = 1. + tau / d_t;
 	double coef;
 	int off = 2.;
 	int j;
+
+	CalculateConcentrationWave();
+	//n_w = n_w;
 
 	Vector b(col_size - off);
 	Vector NewConc, check;
@@ -519,7 +523,7 @@ vector< double > Loop::RefineMesh()
 			S.insert(i, i - 1) = ((2. * coef + 1.) / R[j - 1] + coef / R[j]) * t_frac;
 			S.insert(i, i + 0) = (-coef / R[j - 1] - (2. * coef + 1.) / R[j]) * t_frac;
 			S.insert(i, i + 1) = coef / R[j] * t_frac;
-			b(i) = 0.;
+			b(i) = tau / d_t * (n_w[j - 1] / R[j - 1] - n_w[j] / R[j]);
 		} 
 		else if (i == 0 || i == col_size - off - 1) {
 			S.insert(i, i) = 1.;
@@ -546,21 +550,33 @@ vector< double > Loop::RefineMesh()
 	vector < double > x_ = GetValues("coordinate");;
 	vector < double > vec;
 	vec.insert(vec.end(), &NewConc.data()[0], &NewConc.data()[col_size - off]);
-	double TS = 0.;
-	for (int i = 1; i < col_size - off; ++i) {
-		//TS += 0.5 * (x_[i + off/2.] - x_[i + off/2. - 1]) * (vec[i] + vec[i - 1]);
-		if (i <= 1 || i >= col_size - 1 - off) {
-			TS += FindArea(vec.data() + i - 1, x_.data() + i + int(off) / 2 - 1, 0);
-		}
-		else {
-			TS += FindArea(vec.data() + i - 1, x_.data() + i + int(off) / 2 - 1, 1);
-		}
-	}
-	for (int i = 0; i < col_size - off; ++i) {
-		vec[i] /= TS / TotalSum;
-	}
 
-	vec = Redistribute("coordinate", vec);
+	// Appropriate coordinates redistribution.
+	vector <double> result_dx(vec.size() - 1);
+	std::transform(vec.begin(), vec.end() - 1, result_dx.begin(), [](double n) -> double {return 1. / n;  });
+	double x_sum = std::accumulate(result_dx.begin(), result_dx.end(), 0.);
+	std::transform(vec.begin(), vec.end(), vec.begin(), [x_sum](double n) -> double {return n * x_sum; });
+	vec.insert(vec.begin(), 0.);
+	std::transform(vec.begin() + 1, vec.end() - 1, vec.begin(), vec.begin() + 1, [](double n, double prev_x) -> double {return prev_x + 1. / n; });
+	vec.insert(vec.begin(), 0.);
+	vec[vec.size() - 2] = x_.back();
+	vec.back() = x_.back();
+
+	//double TS = 0.;
+	//for (int i = 1; i < col_size - off; ++i) {
+	//	//TS += 0.5 * (x_[i + off/2.] - x_[i + off/2. - 1]) * (vec[i] + vec[i - 1]);
+	//	if (i <= 1 || i >= col_size - 1 - off) {
+	//		TS += FindArea(vec.data() + i - 1, x_.data() + i + int(off) / 2 - 1, 0);
+	//	}
+	//	else {
+	//		TS += FindArea(vec.data() + i - 1, x_.data() + i + int(off) / 2 - 1, 1);
+	//	}
+	//}
+	//for (int i = 0; i < col_size - off; ++i) {
+	//	vec[i] /= TS / TotalSum;
+	//}
+
+	//vec = Redistribute("coordinate", vec);
 
 	vector < string > ignore;
 	vector < vector < double > > new_tab;
@@ -779,12 +795,48 @@ void Loop::SmoothN(double coef)
 
 	for (int i = 1 ; i < col_size - 1; ++i)
 	{
-		smoothed_n[i] = (pow(n[i - 1], 2) + pow(n[i + 1], 2)) / (n[i - 1] + n[i + 1]) * side_coef + n[i] * coef;
+		smoothed_n[i] = (pow(n[i - 1], 1) + pow(n[i + 1], 1)) /*/ (n[i - 1] + n[i + 1])*/ * side_coef + n[i] * coef;
 	}
 	smoothed_n[0] = n[0];
 	smoothed_n[col_size - 1] = n[col_size - 1];
 
 	n = smoothed_n;
+}
+
+// New smooting algorithm
+const vector < double > Loop::smooth_least_square(const vector < double > x, const vector < double > f, unsigned int poly_degree, unsigned int half_count_points)
+{
+	if (poly_degree == 0)
+		return f;
+
+	int vec_size = x.size();
+	vector <double> smoothed_f(vec_size);
+
+	MatrixXf A(2 * half_count_points + 1, poly_degree + 1);
+	VectorXf f_vec(2 * half_count_points + 1);
+	VectorXf poly_coefs(poly_degree + 1);
+	for (int row = 0; row < 2 * half_count_points + 1; ++row)
+		A.coeffRef(row, poly_degree) = 1.;
+
+	for (int i = 0; i < vec_size; ++i)
+	{
+		int A_row = 0;
+		for (int row = i - int(half_count_points); row <= i + int(half_count_points); ++row)
+		{
+			int item = min(max(0, row), vec_size - 1);
+			for (int A_col = int(poly_degree) - 1; A_col >= 0; --A_col)
+				A.coeffRef(A_row, A_col) = x[item] * A(A_row, A_col + 1);
+
+			f_vec.coeffRef(A_row) = f[item];
+			++A_row;
+		}
+		poly_coefs = A.bdcSvd(ComputeThinU | ComputeThinV).solve(f_vec);
+		for (unsigned int j = 0; j < poly_degree - 1; ++j)
+			smoothed_f[i] += pow(x[i], poly_degree - j) * poly_coefs(j);
+		smoothed_f[i] += x[i] * poly_coefs(poly_degree - 1) + poly_coefs(poly_degree);
+	}
+
+	return smoothed_f;
 }
 
 void Loop::AddCollumnR()
