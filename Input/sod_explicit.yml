@@ -1,4 +1,4 @@
-solver: hlle             # cusp, cds, vanleer, hlle
+solver: hllc             # cusp, cds, vanleer, hlle
 gas: Ideal
 Cp: 1
 gamma: 1.4

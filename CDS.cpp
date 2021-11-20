@@ -8,8 +8,6 @@ CDS::CDS(sol_struct& sol_init_, cds_struct& cds_init_) : Solver( sol_init_),
 			diss_blend(cds_init_.diss_blend),
 			diss_flag(cds_init_.diss_flag) 
 {
-	solver_name = "cds";
-
 	cout << "Solver is '" << solver_name << "'" << endl;
 
 	cout << "\tvis2: " << vis2 << endl;

@@ -60,6 +60,8 @@ struct sol_struct
 	bool remesh; // remeshing for unsteady problems
 
 	int time_stepping;	// time stepping
+
+	string solver_name;
 };
 
 class Solver

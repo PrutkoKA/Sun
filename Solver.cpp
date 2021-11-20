@@ -39,7 +39,8 @@ Solver::Solver(sol_struct& sol_init_) :
 					lts(sol_init_.lts),
 					remesh(sol_init_.remesh),
 					steadiness(sol_init_.steadiness), 
-					time_stepping(sol_init_.time_stepping)
+					time_stepping(sol_init_.time_stepping),
+					solver_name(sol_init_.solver_name)
 {
 	eq_num = vars.size();
 	var_num = vars_o.size();
@@ -2617,7 +2618,7 @@ Solver* CreateReadConfigFile(string file_name)
 		else if (solver_s == "vanleer") {
 
 		}
-		else if (solver_s == "hlle") {
+		else if (solver_s == "hlle" || solver_s == "hllc") {
 
 		}
 		else {
@@ -2638,6 +2639,7 @@ Solver* CreateReadConfigFile(string file_name)
 	sol_struct sol_init;
 	cds_struct cds_init;
 
+	sol_init.solver_name = solver_s;
 	if (config["time_treat"].as< string >() == "implicit") {
 		string IRKC_name = "IRKC_" + config["IRK"].as< string >();
 
@@ -2735,7 +2737,7 @@ Solver* CreateReadConfigFile(string file_name)
 		return new VL(sol_init);
 
 	}
-	if (solver_s == "hlle") {
+	if (solver_s == "hlle" || solver_s == "hllc") {
 		return new HLLE(sol_init);
 
 	}

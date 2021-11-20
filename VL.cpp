@@ -4,8 +4,6 @@
 
 VL::VL(sol_struct& sol_init_) : Solver( sol_init_)
 {
-	solver_name = "vanleer";
-
 	cout << "Solver is '" << solver_name << "'" << endl;
 
 }

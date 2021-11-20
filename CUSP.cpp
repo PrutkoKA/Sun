@@ -3,8 +3,6 @@
 
 CUSP::CUSP(sol_struct& sol_init_) : Solver( sol_init_)
 {
-	solver_name = "cusp";
-
 	cout << "Solver is '" << solver_name << "'" << endl;
 
 }
