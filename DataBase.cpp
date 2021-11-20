@@ -129,6 +129,30 @@ int DataBase::PrintRow(string file_name, vector< double > row)
 	return PrintRow(file_name, valarray< double >(row.data(), row.size()));
 }
 
+int DataBase::PrintWholeRow(string file_name, vector< double > row)
+{
+	return PrintWholeRow(file_name, valarray< double >(row.data(), row.size()));
+}
+
+int DataBase::PrintWholeRow(string file_name, valarray< double > row)
+{
+	FILE* file;
+
+	file = fopen(file_name.c_str(), "a");
+	if (!file) {
+		cout << "File \"" << file_name.c_str() << "\" wasn't opened." << endl;
+		return -1;
+	}
+
+	for (unsigned int i = 0; i < row.size(); ++i) {
+		fprintf(file, "%lf\t", row[i]);
+	}
+	fprintf(file, "\n");
+	fclose(file);
+
+	return 0;
+}
+
 int DataBase::PrintColumn(string file_name, vector< double > column)
 {
 	FILE* file;
@@ -258,7 +282,8 @@ vector < vector < double > > DataBase::NewTable(string col_name, vector < double
 		}
 		temp_va = GetFromPoint(col_name, val);
 		if (ignore_cols.size() > 0) {
-			index = FindIndexInCol(col_name, val);
+			//index = FindIndexInCol(col_name, val);
+			index = i;
 			for (auto col : ignore_cols) {
 				temp_va[columns[col]] = GetRow(index)[columns[col]];
 			}

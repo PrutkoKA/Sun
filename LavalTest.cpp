@@ -445,7 +445,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 {
 	cout << endl << "  ---  Laval6 test  ---  " << endl;
 
-	string file_name = "Input/sod.yml";
+	string file_name = "Input/sod_explicit.yml";
 
 	Loop laval;
 	Solver* cusp_s;
@@ -465,7 +465,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 
 	cusp_s->SetGrid(laval);
 	cusp_s->ReadBoundaries("Input/sod_boundary.yml");
-	cusp_s->SetOutputFile("Output/output5.txt");
+	cusp_s->SetOutputFile("Output/sod_explicit_adaptive_grid.txt");
 	// cusp_s->HideOutput();
 	// cusp_s->InverseGrid();
 
@@ -493,7 +493,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	//double e_ = (cpgas_ - rgas_) * t01_;		// $E = (c_{p gas} - r_{gas}) T_{01}$
 
 	double rho_[2] = { 1, 0.125 };
-	double u_[2] = { 0.75, 0 };
+	double u_[2] = { 0.75, 0. };
 	double mass_[2];
 	double p_[2] = { 1., 0.1 };
 	double e_[2];
@@ -504,24 +504,38 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	}
 
 	// cusp_s->InverseGrid();
-	cusp_s->InitFlowAG(rho_, mass_, e_, p_, 0.3);
+	double shock_pos = 0.3;
+	cusp_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+
+	FILE* file;
+	file = fopen("Output/RemeshedCoords.txt", "w");
+	fclose(file);
+	cusp_s->grid.PrintWholeRow("Output/RemeshedCoords.txt", cusp_s->grid.GetCoordinates());
 
 	// Parameters to adjust mesh were used
-	for (int i = 0; i < 1000; ++i) {
-		cusp_s->AdjustMesh(rho_, mass_, e_, p_, 0.3, i % 15 == 0);
+	for (int i = 0; i < 100; ++i) {
+		double relax_coef = i < 300 ? 0.5
+			: i < 500 ? 0.2
+			: i < 1700 ? 0.05
+			: i < 2000 ? 0.05 
+			: i < 5000 ? 0.02 : 0.005;
+		cusp_s->AdjustMesh(rho_, mass_, e_, p_, shock_pos, 1.);
+		cusp_s->grid.PrintWholeRow("Output/RemeshedCoords.txt", cusp_s->grid.GetCoordinates());
 	}
+	cusp_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
 	cusp_s->CalculateVolumes();
 	cusp_s->grid.SetRow("volume", cusp_s->vol);
 	//cusp_s->grid.RefreshR("R");
 	//cusp_s->grid.RefreshN("n");
 	cusp_s->grid.PrintTable("Output/RemeshedGrid.txt");
-	return;
+	//return;
 
 	cusp_s->RhoUPH();
 	cusp_s->RefreshBoundaries();
 
-	//double physDt_ = 0.2e-2;
-	double physDt_ = 1e-10;
+	double fac = 1. / 1e1;
+	double physDt_ = 0.2e-2 * fac / 1.;
+	//double physDt_ = 1e-10;
 
 	// convtol = 1e-5;
 	//cusp_s->cvn = cusp_s->cv;
@@ -545,21 +559,194 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	cusp_s->S.reserve(VectorXi::Constant((cusp_s->ib2 - 1) * cusp_s->eq_num, cusp_s->eq_num * cusp_s->eq_num));
 
 	//cusp_s->CalculateTimeSource(cusp_s->cvn, cusp_s->cvnm1, physDt_);
+	cusp_s->grid.AddColumn("old_coords", cusp_s->grid.GetValues("coordinate"));
 	cusp_s->iter = 0.;
 	int iter = 0;
 	double ttime = 0.;
 	if (cusp_s->time_stepping == 0) {
 		//while (ttime < 0.2 / 1. * 1.) {
-		while (ttime < physDt_) {
+		while (ttime < 0.2e-2 * fac * 1000.) {
 			//while (cusp_s->Global_Time < 0.2*50) {
 			cusp_s->iter = 0;
 			drho = 1.;
+			cusp_s->calculate_mass_matrix();
+			cusp_s->fill_inverse_mass_matrix();
+
+			vector <double> very_old_coords = cusp_s->grid.GetCoordinates();
+			vector < double > cvn1 = cusp_s->cvn[cusp_s->RHO_A];
+			vector < double > cvn2 = cusp_s->cvn[cusp_s->RHO_U_A];
+			vector < double > cvn3 = cusp_s->cvn[cusp_s->RHO_E_A];
+
+			vector < double > cvnm1 = cusp_s->cvnm1[cusp_s->RHO_A];
+			vector < double > cvnm2 = cusp_s->cvnm1[cusp_s->RHO_U_A];
+			vector < double > cvnm3 = cusp_s->cvnm1[cusp_s->RHO_E_A];
+			vector <vector <vector <double> > > cvss;
+			cvss.push_back(vector <vector <double> >());
+			cvss[0].push_back(cvn1);
+			cvss[0].push_back(cvn2);
+			cvss[0].push_back(cvn2);
+			cvss.push_back(vector <vector <double> >());
+			cvss[1].push_back(cvnm1);
+			cvss[1].push_back(cvnm2);
+			cvss[1].push_back(cvnm2);
+
+			cusp_s->grid.SetRow("old_coords", cusp_s->grid.GetValues("coordinate"));
+			cusp_s->cvn_old = cusp_s->cvn;
+			cusp_s->cvnm1_old = cusp_s->cvnm1;
+
+
 			for (int iter = 0; iter < maxiter && drho > convtol && true; ++iter)
 			{
+				
+				if (cusp_s->remesh && false) {
+					vector <double> old_coords = cusp_s->grid.GetCoordinates();
+					// New adaptive grid
+					for (int i = 0; i < 1; ++i) {
+						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
+						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
+						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+
+						cusp_s->grid.CalculateResolution(1., 1., "rho", "coordinate");
+						cusp_s->grid.CalculateConcentration(1., "coordinate");
+
+						cusp_s->x = cusp_s->grid.RefineMesh(physDt_, 1e-2);
+
+						cusp_s->cv[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
+						cusp_s->cv[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
+						cusp_s->cv[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+
+						cusp_s->RefreshBoundaries();						// Refresh boundary conditions
+						cusp_s->RhoUPH();
+
+						cusp_s->CalculateVolumes();
+						cusp_s->grid.SetRow("volume", cusp_s->vol);
+					}
+					// Now we will reevaluate cvn, cvnm1, cvold
+					set < vector < vector < double > >* > cvs{ &cusp_s->cvn, &cusp_s->cvnm1, &cusp_s->cvold };
+
+					for (auto it : cvs)
+					{
+						cusp_s->grid.SetRow("coordinate", old_coords);
+						cusp_s->grid.SetRow("rho", (*it)[cusp_s->RHO_A]);
+						cusp_s->grid.SetRow("rhoU", (*it)[cusp_s->RHO_U_A]);
+						cusp_s->grid.SetRow("rhoE", (*it)[cusp_s->RHO_E_A]);
+
+						vector < string > ignore;
+						vector < vector < double > > new_tab;
+						ignore.push_back(cusp_s->grid.TYPE_COL);
+						new_tab = cusp_s->grid.NewTable("coordinate", cusp_s->x, ignore, false);
+						cusp_s->grid.SetData(new_tab);
+
+						(*it)[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
+						(*it)[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
+						(*it)[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+					}
+
+					cusp_s->grid.SetRow("coordinate", cusp_s->x);
+					cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
+					cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
+					cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+
+					cusp_s->calculate_mass_matrix();
+					cusp_s->fill_inverse_mass_matrix();
+				}
+
+
 				drho = cusp_s->Solve(physDt_);
 				//drho = cusp_s->SolveImplicit();
 				//break;
 			}
+
+			
+
+			vector < double > cv1 = cusp_s->cv[cusp_s->RHO_A];
+			vector < double > cv2 = cusp_s->cv[cusp_s->RHO_U_A];
+			vector < double > cv3 = cusp_s->cv[cusp_s->RHO_E_A];
+			vector <double> old_coords = cusp_s->grid.GetCoordinates();
+
+			auto remesh = [&](int count, bool use_func, double tau) -> void {
+				if (cusp_s->remesh && true) {
+
+					// New adaptive grid
+					for (int i = 0; i < count; ++i) {
+						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
+						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
+						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+
+						vector< vector <double> > functions;;
+						vector< double > Fs;
+
+						if (use_func)
+						{
+							functions.push_back(cusp_s->cvn[cusp_s->RHO_A]);
+							Fs.push_back(1.);
+						}
+
+						cusp_s->grid.CalculateResolution(1., 1., "rho", "coordinate", functions, Fs);
+						cusp_s->grid.CalculateConcentration(1., "coordinate");
+
+						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
+						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
+						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+						cusp_s->grid.SetRow("coordinate", old_coords);
+
+						cusp_s->x = cusp_s->grid.RefineMesh(physDt_, tau);
+
+						cusp_s->cv[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
+						cusp_s->cv[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
+						cusp_s->cv[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+
+						cusp_s->RefreshBoundaries();						// Refresh boundary conditions
+						cusp_s->RhoUPH();
+
+						cusp_s->CalculateVolumes();
+						cusp_s->grid.SetRow("volume", cusp_s->vol);
+					}
+					// Now we will reevaluate cvn, cvnm1, cvold
+					vector < vector < vector < double > >* > cvs{ &cusp_s->cvn, &cusp_s->cvnm1/*, &cusp_s->cvold*/ };
+
+					if (count > 0)
+					{
+						int i = 0;
+						for (auto it : cvs)
+						{
+							cusp_s->grid.SetRow("coordinate", very_old_coords);
+							cusp_s->grid.SetRow("rho", /*(*it)[cusp_s->RHO_A])*/cvss[i][0]);
+							cusp_s->grid.SetRow("rhoU", /*(*it)[cusp_s->RHO_U_A])*/cvss[i][1]);
+							cusp_s->grid.SetRow("rhoE", /*(*it)[cusp_s->RHO_E_A])*/cvss[i][2]);
+							++i;
+
+							vector < string > ignore;
+							vector < vector < double > > new_tab;
+							ignore.push_back(cusp_s->grid.TYPE_COL);
+							new_tab = cusp_s->grid.NewTable("coordinate", cusp_s->x, ignore, false);
+							cusp_s->grid.SetData(new_tab);
+
+							(*it)[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
+							(*it)[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
+							(*it)[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+						}
+
+						cusp_s->grid.SetRow("coordinate", cusp_s->x);
+						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
+						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
+						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+
+						// Checking cvn transformation
+						/*cusp_s->cv[cusp_s->RHO_A] = cusp_s->cvn[cusp_s->RHO_A];
+						cusp_s->cv[cusp_s->RHO_U_A] = cusp_s->cvn[cusp_s->RHO_U_A];
+						cusp_s->cv[cusp_s->RHO_E_A] = cusp_s->cvn[cusp_s->RHO_E_A];
+						cusp_s->RhoUPH();*/
+
+						cusp_s->calculate_mass_matrix();
+						cusp_s->fill_inverse_mass_matrix();
+					}
+				}
+			};
+
+			//remesh(0, false, 1e-1);
+			remesh(0, false, 1e15);
+
 			cusp_s->cvnm1 = cusp_s->cvn;
 			cusp_s->cvn = cusp_s->cv;
 			//if (cusp_s->iter == 1)
@@ -568,7 +755,10 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 			//cout << cusp_s->Global_Time << endl;
 			ttime += physDt_;
 			iter += cusp_s->iter;
-			cout << iter << endl;
+			cout << iter << "\t" << ttime << endl;
+
+			//if (!cusp_s->steadiness)
+				//cusp_s->PrintResult();
 		}
 	}
 	if (cusp_s->time_stepping == 1) {

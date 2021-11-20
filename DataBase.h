@@ -4,6 +4,7 @@
 #include <fstream>
 #include <map>
 #include <vector>
+#include <set>
 #include <valarray>
 #include <string>
 //#include <conio.h>
@@ -45,6 +46,8 @@ public:
 	int PrintHeader(string file_name);
 	int PrintRow(string file_name, valarray< double > row);
 	int PrintRow(string file_name, vector< double > row);
+	int PrintWholeRow(string file_name, valarray< double > row);
+	int PrintWholeRow(string file_name, vector< double > row);
 	int PrintColumn(string file_name, vector< double > column);
 	int PrintTable(string file_name);
 	int PrintTable(string file_name, vector < vector < double > > table);
@@ -54,6 +57,7 @@ public:
 	void ShowColumn(string col_name);
 	void ShowColumn(vector< double > column);
 	vector< double > GetValues(string col_name);
+	bool ColumnExists(string col_name) { return !(columns.find(col_name) == columns.end()); };
 
 	vector < vector < double > > GetTable();
 	map< string, int > GetColumnNames();

@@ -27,7 +27,7 @@ public:
 	void RefreshX(string col_name);
 	void RefreshR(string col_name);
 	void RefreshN(string col_name);
-	void CalculateResolution(double X, double F, string function_name, string x_name);
+	void CalculateResolution(double X, double F, string function_name, string x_name, const vector < vector <double> >& functions = vector < vector <double> >(), const  vector <double> & Fs = vector <double>());
 	void CalculateConcentration(double X, string x_name);
 	vector <double>& GetConcentrationRef() { return n; };
 	void CalculateConcentrationWave();
@@ -38,7 +38,7 @@ public:
 	double FindCubicFunctionValue(double a, double b, double c, double d, double x);
 	void SetNewPoint(double S_left, double& sec_area, double& conc_cur, int searchMethod, vector < double >& new_x, double prev_x, int& id, double slope = 0., double* conc = NULL, double* x_ = NULL);
 	double dxSearch(double S_left, double conc_, int method, double slope = 0., double prev_x = 0., double* conc = NULL, double* x_ = NULL);
-	vector< double > RefineMesh();
+	vector< double > RefineMesh(double dt_ = 1., double tau_ = 10., double relax_coef = 1., vector <string> ignore = vector<string>());
 	void FindMesh(double dt, string x_name);
 	void SmoothN(double coef);
 	const vector < double > smooth_least_square (const vector < double > x, const vector < double > f, unsigned int poly_degree, unsigned int half_count_points);
@@ -59,7 +59,7 @@ private:
 	vector < double > n_w;	//wave (~)
 	vector < double > n_w_old;
 	vector < double > n_t;  //tilda? cap? (^)
-	double alpha = 3.;
+	double alpha = 2.;
 	const string COORD_COL = "coordinate";
 	const string SECT_COL = "section";
 	const string TIME_COL = "time";

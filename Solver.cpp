@@ -37,6 +37,7 @@ Solver::Solver(sol_struct& sol_init_) :
 					TSRK_eta(sol_init_.TSRK_eta),
 					TSRK_q(sol_init_.TSRK_q),
 					lts(sol_init_.lts),
+					remesh(sol_init_.remesh),
 					steadiness(sol_init_.steadiness), 
 					time_stepping(sol_init_.time_stepping)
 {
@@ -237,9 +238,10 @@ void Solver::InitFlowAG2(double* rho_, double* mass_, double* e_, double* p_, do
 	{
 		id = 0;
 		if (x[i] > x_) { id = 1; }
-		cv[RHO_A][i] = rho_[id] * a[i];		//	$\rho S$
-		cv[RHO_U_A][i] = mass_[id];					//	$\rho u S$
-		cv[RHO_E_A][i] = rho_[id] * e_[id] * a[i];	//	$\rho E S$
+		double blend = (tanh((x[i] - x_) * 200.) + 1.) / 2.;
+		cv[RHO_A][i] = ((1. - blend) * rho_[0] + blend * rho_[1]) * a[i];		//	$\rho S$
+		cv[RHO_U_A][i] = ((1. - blend) * mass_[0] + blend * mass_[1]);					//	$\rho u S$
+		cv[RHO_E_A][i] = ((1. - blend) * rho_[0] * e_[0] + blend * rho_[1] * e_[1]) * a[i];	//	$\rho E S$
 		p[i] = p_[id];
 	}
 }
@@ -876,20 +878,63 @@ double Solver::SolveExplImpl(double physDt)
 		RhoUPH();
 	}
 
-	if (false) {
-		for (int i = 0; i < 100; ++i) {
+	double tau = 1e-2;
+	if (remesh && true) {
+		vector <double> old_coords = grid.GetCoordinates();
+		// New adaptive grid
+		/*vector < double > cv1 = cv[RHO_A];
+		vector < double > cv2 = cv[RHO_U_A];
+		vector < double > cv3 = cv[RHO_E_A];*/
+		RhoUPH();
+		vector < double > fv_U = fv[U];
+		vector < double > fv_H = fv[H];
+		vector < double > fv_U_new = fv[U];
+		vector < double > fv_H_new = fv[H];
+		for (int i = 0; i < 1; ++i) {
 			grid.SetRow("rho", cv[RHO_A]);
 			grid.SetRow("rhoU", cv[RHO_U_A]);
 			grid.SetRow("rhoE", cv[RHO_E_A]);
+			//grid.SetRow("coordinate", old_coords);
 
-			grid.CalculateResolution(1., 1., "rho", "coordinate");
+			vector< vector <double> > functions;;
+			vector< double > Fs;
+			//if (iter > 1)
+			{
+				functions.push_back (cvn[RHO_A]);
+				/*functions.push_back(fv_U_new);
+				functions.push_back(fv_H_new);*/
+				Fs.push_back (1e-1);
+				/*Fs.push_back(1.);
+				Fs.push_back(1.);*/
+			}
+			grid.CalculateResolution(1., 1e0, "rho", "coordinate", functions, Fs);
 			grid.CalculateConcentration(1., "coordinate");
 
-			x = grid.RefineMesh();
+			/*grid.SetRow("rho", cv1);
+			grid.SetRow("rhoU", cv2);
+			grid.SetRow("rhoE", cv3);*/
+			if (grid.ColumnExists("U"))
+			{
+				grid.SetRow("U", fv_U);
+				grid.SetRow("H", fv_H);
+			}
+			else
+			{
+				grid.AddColumn("U", fv_U);
+				grid.AddColumn("H", fv_H);
+			}
+			//grid.SetRow("coordinate", old_coords);
+
+			vector <string> ignore;
+			ignore.push_back("old_coords");
+			x = grid.RefineMesh(dt[0], tau, 1., ignore);
 
 			cv[RHO_A] = grid.GetValues("rho");
 			cv[RHO_U_A] = grid.GetValues("rhoU");
 			cv[RHO_E_A] = grid.GetValues("rhoE");
+
+			fv_U_new = grid.GetValues("U");
+			fv_H_new = grid.GetValues("H");
 
 			RefreshBoundaries();						// Refresh boundary conditions
 			RhoUPH();
@@ -897,8 +942,44 @@ double Solver::SolveExplImpl(double physDt)
 			CalculateVolumes();
 			grid.SetRow("volume", vol);
 		}
-	}
+		// Now we will reevaluate cvn, cvnm1, cvold
+		vector < vector < vector < double > >* > cvs{ &cvn, &cvnm1, &cvold };
+		vector < vector < vector < double > > > cvs_old{ cvn_old, cvnm1_old, cvold };
+		vector <vector <double> > old_coords_v;
+		old_coords_v.push_back(grid.GetValues("old_coords"));
+		old_coords_v.push_back(grid.GetValues("old_coords"));
+		old_coords_v.push_back(old_coords);
+		int i = 0;
 
+		for (auto it : cvs)
+		{
+			grid.SetRow("coordinate", old_coords_v[i]);
+			grid.SetRow("rho", /*(*it)[RHO_A])*/cvs_old[i][RHO_A]);
+			grid.SetRow("rhoU", /*(*it)[RHO_U_A])*/cvs_old[i][RHO_U_A]);
+			grid.SetRow("rhoE", /*(*it)[RHO_E_A])*/cvs_old[i][RHO_E_A]);
+			++i;
+
+			vector < string > ignore;
+			vector < vector < double > > new_tab;
+			ignore.push_back("old_coords");
+			ignore.push_back(grid.TYPE_COL);
+			new_tab = grid.NewTable("coordinate", x, ignore, false);
+			grid.SetData(new_tab);
+
+			(*it)[RHO_A] = grid.GetValues("rho");
+			(*it)[RHO_U_A] = grid.GetValues("rhoU");
+			(*it)[RHO_E_A] = grid.GetValues("rhoE");
+		}
+
+		grid.SetRow("coordinate", x);
+		grid.SetRow("rho", cv[RHO_A]);
+		grid.SetRow("rhoU", cv[RHO_U_A]);
+		grid.SetRow("rhoE", cv[RHO_E_A]);
+
+		calculate_mass_matrix();
+		fill_inverse_mass_matrix();
+	}
+	/*
 	//if (true)
 	//{		// New piece of work
 	//	vector < double > Res, Conc;
@@ -994,12 +1075,12 @@ double Solver::SolveExplImpl(double physDt)
 	//	// fprintf(file, "%lf\t", p[i]);
 	//}
 	//fprintf(file, "\n");
-	//fclose(file);
+	//fclose(file);*/
 
 	return Convergence();
 }
 
-void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, bool smooth)
+void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef)
 {
 	InitFlowAG2(rho_, mass_, e_, p_, x_);
 
@@ -1012,18 +1093,18 @@ void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, dou
 
 	std::vector<double> v(grid.GetConcentration().size());
 	std::iota(v.begin(), v.end(), 0.);
-	double coef = 0.0;
+	double coef = 0.5;
 	// Parameter to adjust mesh was used
-	for (int i = 0; i < 10 && smooth; ++i)
-	{
-		vector <double> smoothed_n = grid.smooth_least_square(/*grid.GetCoordinates()*/v, grid.GetConcentration(), 2, 2);
-		for (int j = 0; j < smoothed_n.size(); ++j)
-			grid.GetConcentrationRef()[j] = coef * grid.GetConcentrationRef()[j] + (1. - coef) * smoothed_n[j];
-	}
+	//for (int i = 0; i < 1 && smooth; ++i)
+	//{
+	//	vector <double> smoothed_n = grid.smooth_least_square(/*grid.GetCoordinates()*/v, grid.GetConcentration(), 2, 2);
+	//	for (int j = 0; j < smoothed_n.size(); ++j)
+	//		grid.GetConcentrationRef()[j] = coef * grid.GetConcentrationRef()[j] + (1. - coef) * smoothed_n[j];
+	//}
 	//grid.SmoothN(0.5);
 
 
-	x = grid.RefineMesh();
+	x = grid.RefineMesh(1., 10., relax_coef);
 
 	cv[RHO_A] = grid.GetValues("rho");
 	cv[RHO_U_A] = grid.GetValues("rhoU");
@@ -1845,6 +1926,13 @@ void Solver::LUSGS(DiagonalFunc D_Func, LUFunc L_Func, LUFunc U_Func, int rks, v
 
 	vector < vector < double > >	Wn(eq_num, vector < double >(imax, 0.));
 
+	auto scalar_prod = [](const vector < double >::const_iterator& vec1, const vector < double >::const_iterator& vec2, int size) -> double
+	{
+		vector <double> prods(size);
+		std::transform(vec1, vec1 + size, vec2, prods.begin(), std::multiplies<double>());
+		return std::accumulate(prods.begin(), prods.end(), 0.);
+	};
+
 	GetWn(Wn);
 
 	Wijk[0](0) = Wn[0][0];
@@ -1868,7 +1956,14 @@ void Solver::LUSGS(DiagonalFunc D_Func, LUFunc L_Func, LUFunc U_Func, int rks, v
 		
 		dW = (Wijk[i - 1] - GetEigenVector(Wn, i - 1)) * a[i - 1];
 		LdW1 = Li * dW;
-		R1 = ak[rks][rks] * GetEigenVector(rhs, i);
+		//if (steadiness)
+			R1 = ak[rks][rks] * GetEigenVector(rhs, i);
+		/*else
+		{
+			for (int eq = 0; eq < eq_num; ++eq)
+				R1(eq) = ak[rks][rks] * scalar_prod(rhs[eq].begin() + 1, M_matrix.inversed_mass_matrix[i - 1].begin(), ib2 - 1);
+		}*/
+
 		for (int l = 0; l < rks; ++l)
 		{
 			R1 += ak[rks][l] * GetEigenVector(rhsstage[l], i);
@@ -2621,6 +2716,8 @@ Solver* CreateReadConfigFile(string file_name)
 	sol_init.eps_impl_res_smooth = config["eps_impl_res_smooth"].as< double >();
 
 	sol_init.lts = config["lts"].as< bool >();
+
+	sol_init.remesh = config["remesh"].as< bool >();
 
 	if (solver_s == "cds") {
 		cds_init.diss_blend = config["cds"]["diss_blend"].as< vector < double > >();

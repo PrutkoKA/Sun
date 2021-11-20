@@ -54,7 +54,7 @@ void Loop::RefreshN(string col_name)
 	SetRow(col_name, n);
 }
 
-void Loop::CalculateResolution(double X, double F, string function_name, string x_name)
+void Loop::CalculateResolution(double X, double F, string function_name, string x_name, const vector < vector <double> >& functions, const  vector <double>& Fs)
 {
 	if (R.size() == 0)
 		R.resize(col_size, 0.);
@@ -76,13 +76,21 @@ void Loop::CalculateResolution(double X, double F, string function_name, string 
 			R[i] = 0.;
 			factor = 0.;
 			if (x[i + 1] - x[i] > 0.) {
-				R[i] += sqrt(1. + pow(X / F * (f[i + 1] - f[i]) / (x[i + 1] - x[i]), 2));
+				double sum = pow(X / F * (f[i + 1] - f[i]) / (x[i + 1] - x[i]), 2);
+				for (int f_i = 0; f_i < functions.size(); ++f_i)
+					sum += pow(X / Fs[f_i] * (functions[f_i][i + 1] - functions[f_i][i]) / (x[i + 1] - x[i]), 2);
+
+				R[i] += sqrt(1. + sum);
 				factor++;
 			}
-			/*if (x[i] - x[i - 1] > 0.) {
-				R[i] += sqrt(1. + pow(X / F * (f[i] - f[i - 1]) / (x[i] - x[i - 1]), 2));
+			if (x[i] - x[i - 1] > 0.) {
+				double sum = pow(X / F * (f[i] - f[i - 1]) / (x[i] - x[i - 1]), 2);
+				for (int f_i = 0; f_i < functions.size(); ++f_i)
+					sum += pow(X / Fs[f_i] * (functions[f_i][i] - functions[f_i][i - 1]) / (x[i] - x[i - 1]), 2);
+
+				R[i] += sqrt(1. + sum);
 				factor++;
-			}*/
+			}
 			R[i] /= factor;
 		}
 		else {
@@ -117,10 +125,10 @@ void Loop::CalculateConcentration(double X, string x_name)
 				n[i] += X / (x[i + 1] - x[i]);
 				factor++;
 			}
-			/*if (x[i] - x[i - 1] > 0.) {
+			if (x[i] - x[i - 1] > 0.) {
 				n[i] += X / (x[i] - x[i - 1]);
 				factor++;
-			}*/
+			}
 			n[i] /= factor;
 		}
 		else {
@@ -498,10 +506,10 @@ double Loop::dxSearch(double S_left, double conc_, int method, double slope, dou
 	}
 }
 
-vector< double > Loop::RefineMesh()
+vector< double > Loop::RefineMesh(double dt_, double tau_, double relax_coef, vector <string> ignore)
 {
-	double tau = 200.;
-	double d_t = 1.;
+	double tau = tau_;
+	double d_t = dt_;
 	double t_frac = 1. + tau / d_t;
 	double coef;
 	int off = 2.;
@@ -542,9 +550,23 @@ vector< double > Loop::RefineMesh()
 	}
 	S.makeCompressed();
 
-	SparseMatrix<double> LU = ILU_0(S);
+	//MatrixXd A (S);
 
+	SparseMatrix<double> LU = ILU_0(S);
 	NewConc = SolveFromLU(LU, b);		// check 9-10-11 iterations..
+
+	//BiCGSTAB<SparseMatrix<double> > solver;
+
+	//SparseLU<SparseMatrix<double>, COLAMDOrdering<int> > solver;
+	//solver.analyzePattern(S);
+	//solver.factorize(S);
+	//
+	//solver.compute(S);
+
+	//NewConc = solver.solve(b);
+	/*NewConc = A.colPivHouseholderQr().solve(b);*/
+
+
 	//check = S * NewConc;
 	//cout << (check - b).sum() << "\t" << b.sum();
 	vector < double > x_ = GetValues("coordinate");;
@@ -553,11 +575,19 @@ vector< double > Loop::RefineMesh()
 
 	// Appropriate coordinates redistribution.
 	vector <double> result_dx(vec.size() - 1);
-	std::transform(vec.begin(), vec.end() - 1, result_dx.begin(), [](double n) -> double {return 1. / n;  });
+	//std::transform(vec.begin(), vec.end() - 1, result_dx.begin(), [](double n) -> double {return 1. / n;  });
+	result_dx[0] = 1. / vec[0];
+	std::transform(vec.begin() + 1, vec.end() - 1, result_dx.begin(), result_dx.begin() + 1, [](double n, double prev_dx) -> double {return 1. / (2. * n - 1. / prev_dx); });
 	double x_sum = std::accumulate(result_dx.begin(), result_dx.end(), 0.);
 	std::transform(vec.begin(), vec.end(), vec.begin(), [x_sum](double n) -> double {return n * x_sum; });
+
+	result_dx[0] = 1. / vec[0];
+	std::transform(vec.begin() + 1, vec.end() - 1, result_dx.begin(), result_dx.begin() + 1, [](double n, double prev_dx) -> double {return 1. / (2. * n - 1. / prev_dx); });
+	//x_sum = std::accumulate(result_dx.begin(), result_dx.end(), 0.);
+
 	vec.insert(vec.begin(), 0.);
-	std::transform(vec.begin() + 1, vec.end() - 1, vec.begin(), vec.begin() + 1, [](double n, double prev_x) -> double {return prev_x + 1. / n; });
+	//std::transform(vec.begin() + 1, vec.end() - 1, vec.begin(), vec.begin() + 1, [](double n, double prev_x) -> double {return prev_x + 1. / n; });
+	std::transform(result_dx.begin(), result_dx.end() - 1, vec.begin(), vec.begin() + 1, [](double dx, double prev_x) -> double {return prev_x + dx; });
 	vec.insert(vec.begin(), 0.);
 	vec[vec.size() - 2] = x_.back();
 	vec.back() = x_.back();
@@ -578,7 +608,13 @@ vector< double > Loop::RefineMesh()
 
 	//vec = Redistribute("coordinate", vec);
 
-	vector < string > ignore;
+	coef = relax_coef;
+	for (int i = 0; i < vec.size(); ++i)
+	{
+		vec[i] = coef * vec[i] + (1. - coef) * x_[i];
+	}
+
+	//vector < string > ignore;
 	vector < vector < double > > new_tab;
 	ignore.push_back(TYPE_COL);
 	new_tab = NewTable("coordinate", vec, ignore, false);
