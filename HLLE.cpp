@@ -253,7 +253,7 @@ void HLLE::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < 
 		y_val[iy] = y[iy].value();
 }
 
-void HLLE::ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcav, int i, int direction)
+void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* fcav, int i, int direction)
 {
 	using adept::adouble;
 	bool contact = solver_name == "hllc";
@@ -267,15 +267,49 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fc
 	double gamma_ = GetGamma();
 	double sign_(Sign(direction));
 
-	r = x[RHO_A];
-	u = x[RHO_U_A] / x[RHO_A];
-	p_ = (gamma_ - 1.) * (x[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
+	bool use_WAF = false && i != 0 && i != ib2 - 1;
+	vector<adept::adouble> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
+
+	r = x_[RHO_A];
+	u = x_[RHO_U_A] / x_[RHO_A];
+	p_ = (gamma_ - 1.) * (x_[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
+
+	//fv[H][i] = gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2);
+
+	//if (direction > 0)
+	//{
+	//	r = fv[RHO][i];
+	//	u = fv[U][i];
+	//	p_ = fv[P][i];
+	//}
+	//else
+	//{
+	//	r = fv[RHO][i + 1];
+	//	u = fv[U][i + 1];
+	//	p_ = fv[P][i + 1];
+	//}
+
+	
 	c = sqrt(gamma_ * p_ / r);
 	h = gamma_ / (gamma_ - 1.) * p_ / r + 0.5 * pow(u, 2);
 
 	ro = (direction > 0 ? rs[RHO][i] : ls[RHO][i]);
 	uo = (direction > 0 ? rs[U][i] : ls[U][i]);
 	po = (direction > 0 ? rs[P][i] : ls[P][i]);
+
+	//if (direction < 0)
+	//{
+	//	ro = fv[RHO][i];
+	//	uo = fv[U][i];
+	//	po = fv[P][i];
+	//}
+	//else
+	//{
+	//	ro = fv[RHO][i + 1];
+	//	uo = fv[U][i + 1];
+	//	po = fv[P][i + 1];
+	//}
+
 	co = sqrt(gamma_ * po / ro);
 	ho = gamma_ / (gamma_ - 1.) * po / ro + 0.5 * pow(uo, 2);
 
@@ -307,77 +341,157 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fc
 	fcav[RHO_A] = 0.;
 	fcav[RHO_U_A] = 0.;
 	fcav[RHO_E_A] = 0.;
-	if (SLm >= 0. && direction > 0.) {
+
+	// FL
+	if ((SLm >= 0. || use_WAF) && direction > 0.) {
 		fcav[RHO_A] = r * u;
 		fcav[RHO_U_A] = r * u * u + p_;
 		fcav[RHO_E_A] = r * h * u;
+
+		/*fcav[RHO_A] = fv[RHO][i] * fv[U][i];
+		fcav[RHO_U_A] = fv[RHO][i] * fv[U][i] * fv[U][i] + fv[P][i];
+		fcav[RHO_E_A] = fv[RHO][i] * fv[H][i] * fv[U][i];*/
+
+		if (use_WAF)
+			FL.assign (fcav, fcav + eq_num);
 	}
-	if (SRp <= 0. && direction < 0.) {
+	// FR
+	if ((SRp <= 0. || use_WAF) && direction < 0.) {
 		fcav[RHO_A] = r * u;
 		fcav[RHO_U_A] = r * u * u + p_;
 		fcav[RHO_E_A] = r * h * u;
+
+		/*fcav[RHO_A] = fv[RHO][i+1] * fv[U][i+1];
+		fcav[RHO_U_A] = fv[RHO][i+1] * fv[U][i+1] * fv[U][i+1] + fv[P][i+1];
+		fcav[RHO_E_A] = fv[RHO][i+1] * fv[H][i+1] * fv[U][i+1];*/
+
+		if (use_WAF)
+			FR.assign(fcav, fcav + eq_num);
 	}
 	if (!contact)
 	{
-		if (SLm <= 0. && SRp >= 0.) {
+		// FHLLE
+		if ((SLm <= 0. && SRp >= 0.) || use_WAF) {
 			if (direction > 0.) {
-				fcav[RHO_A] = (r * u * SRp - 0. * ro * uo * SLm + SLm * SRp * (0. * ro - x[RHO_A])) / (SRp - SLm);
-				fcav[RHO_U_A] = ((r * u * u + p_) * SRp - 0. * (ro * uo * uo + po) * SLm + SLm * SRp * (0. * ro * uo - x[RHO_U_A])) / (SRp - SLm);
-				fcav[RHO_E_A] = (r * h * u * SRp - 0. * ro * ho * uo * SLm + SLm * SRp * (0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo) - x[RHO_E_A])) / (SRp - SLm);
+				fcav[RHO_A] = (r * u * SRp - 0. * ro * uo * SLm + SLm * SRp * (0. * ro - x_[RHO_A])) / (SRp - SLm);
+				fcav[RHO_U_A] = ((r * u * u + p_) * SRp - 0. * (ro * uo * uo + po) * SLm + SLm * SRp * (0. * ro * uo - x_[RHO_U_A])) / (SRp - SLm);
+				fcav[RHO_E_A] = (r * h * u * SRp - 0. * ro * ho * uo * SLm + SLm * SRp * (0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo) - x_[RHO_E_A])) / (SRp - SLm);
 			}
 			else {
-				fcav[RHO_A] = (0. * ro * uo * SRp - r * u * SLm + SLm * SRp * (x[RHO_A] - 0. * ro)) / (SRp - SLm);
-				fcav[RHO_U_A] = (0. * (ro * uo * uo + po) * SRp - (r * u * u + p_) * SLm + SLm * SRp * (x[RHO_U_A] - 0. * ro * uo)) / (SRp - SLm);
-				fcav[RHO_E_A] = (0. * ro * ho * uo * SRp - r * h * u * SLm + SLm * SRp * (x[RHO_E_A] - 0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo))) / (SRp - SLm);
+				fcav[RHO_A] = (0. * ro * uo * SRp - r * u * SLm + SLm * SRp * (x_[RHO_A] - 0. * ro)) / (SRp - SLm);
+				fcav[RHO_U_A] = (0. * (ro * uo * uo + po) * SRp - (r * u * u + p_) * SLm + SLm * SRp * (x_[RHO_U_A] - 0. * ro * uo)) / (SRp - SLm);
+				fcav[RHO_E_A] = (0. * ro * ho * uo * SRp - r * h * u * SLm + SLm * SRp * (x_[RHO_E_A] - 0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo))) / (SRp - SLm);
 			}
+			if (use_WAF)
+				FHLLE.assign(fcav, fcav + eq_num);
 		}
 	}
 	else
 	{
-		if (SLm <= 0. && S_star >= 0.) {
-			if (direction > 0.) {
-				/*fcav[RHO_A] = (r * u * SRp - 0. * ro * uo * SLm + SLm * SRp * (0. * ro - x[RHO_A])) / (SRp - SLm);
-				fcav[RHO_U_A] = ((r * u * u + p_) * SRp - 0. * (ro * uo * uo + po) * SLm + SLm * SRp * (0. * ro * uo - x[RHO_U_A])) / (SRp - SLm);
-				fcav[RHO_E_A] = (r * h * u * SRp - 0. * ro * ho * uo * SLm + SLm * SRp * (0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo) - x[RHO_E_A])) / (SRp - SLm);*/
-
-				fcav[RHO_A] =   (S_star * (SLm * r - r * u)   + SLm * (p_ + r * (SLm - u) * (S_star - u)) * 0.)     / (SLm - S_star);
-				fcav[RHO_U_A] = (S_star * (SLm * r * u - (r * u * u + p_)) + SLm * (p_ + r * (SLm - u) * (S_star - u)) * 1.)     / (SLm - S_star);
-				fcav[RHO_E_A] = (S_star * (SLm * r * (h - p_ / r) - r * h * u) + SLm * (p_ + r * (SLm - u) * (S_star - u)) * S_star) / (SLm - S_star);
-			}
-			else {
-				/*fcav[RHO_A] = (0. * ro * uo * SRp - r * u * SLm + SLm * SRp * (x[RHO_A] - 0. * ro)) / (SRp - SLm);
-				fcav[RHO_U_A] = (0. * (ro * uo * uo + po) * SRp - (r * u * u + p_) * SLm + SLm * SRp * (x[RHO_U_A] - 0. * ro * uo)) / (SRp - SLm);
-				fcav[RHO_E_A] = (0. * ro * ho * uo * SRp - r * h * u * SLm + SLm * SRp * (x[RHO_E_A] - 0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo))) / (SRp - SLm);*/
-
-				/*fcav[RHO_A] =   (S_star * (SLm * uo * 0. - fcav[RHO_A])   + 0. * SLm * (po + ro * (SLm - uo) * (S_star - uo)) * 0.)     / (SLm - S_star);
-				fcav[RHO_U_A] = (S_star * (SLm * uo * 0. - fcav[RHO_U_A]) + 0. * SLm * (po + ro * (SLm - uo) * (S_star - uo)) * 1.)     / (SLm - S_star);
-				fcav[RHO_E_A] = (S_star * (SLm * uo * 0. - fcav[RHO_E_A]) + 0. * SLm * (po + ro * (SLm - uo) * (S_star - uo)) * S_star) / (SLm - S_star);*/
-				/*fcav[RHO_A] = 0.;
-				fcav[RHO_U_A] = 0.;
-				fcav[RHO_E_A] = 0.;*/
-			}
+		// FL*
+		if (((SLm <= 0. && S_star >= 0.) || use_WAF) && direction > 0.) {
+			fcav[RHO_A] =   (S_star * (SLm * r - r * u)   + SLm * (p_ + r * (SLm - u) * (S_star - u)) * 0.)     / (SLm - S_star);
+			fcav[RHO_U_A] = (S_star * (SLm * r * u - (r * u * u + p_)) + SLm * (p_ + r * (SLm - u) * (S_star - u)) * 1.)     / (SLm - S_star);
+			fcav[RHO_E_A] = (S_star * (SLm * r * (h - p_ / r) - r * h * u) + SLm * (p_ + r * (SLm - u) * (S_star - u)) * S_star) / (SLm - S_star);
+			if (use_WAF)
+				FL_s.assign(fcav, fcav + eq_num);
 		}
-		if (S_star <= 0. && SRp >= 0.) {
-			if (direction > 0.) {
-				/*fcav[RHO_A] = (r * u * SRp - 0. * ro * uo * SLm + SLm * SRp * (0. * ro - x[RHO_A])) / (SRp - SLm);
-				fcav[RHO_U_A] = ((r * u * u + p_) * SRp - 0. * (ro * uo * uo + po) * SLm + SLm * SRp * (0. * ro * uo - x[RHO_U_A])) / (SRp - SLm);
-				fcav[RHO_E_A] = (r * h * u * SRp - 0. * ro * ho * uo * SLm + SLm * SRp * (0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo) - x[RHO_E_A])) / (SRp - SLm);*/
+		// FR*
+		if (((S_star <= 0. && SRp >= 0.) || use_WAF) && direction < 0.) {
+			fcav[RHO_A] =   (S_star * (SRp * r - r * u)   + SRp * (p_ + r * (SRp - u) * (S_star - u)) * 0.) / (SRp - S_star);
+			fcav[RHO_U_A] = (S_star * (SRp * r * u - (r * u * u + p_)) + SRp * (p_ + r * (SRp - u) * (S_star - u)) * 1.) / (SRp - S_star);
+			fcav[RHO_E_A] = (S_star * (SRp * r * (h - p_ / r) - r * h * u) + SRp * (p_ + r * (SRp - u) * (S_star - u)) * S_star) / (SRp - S_star);
+			if (use_WAF)
+				FR_s.assign(fcav, fcav + eq_num);
+		}
+	}
 
-				/*fcav[RHO_A] =   (S_star * (SRp * uo * 0. - fcav[RHO_A])   + 0. * SRp * (po + ro * (SRp - uo) * (S_star - uo)) * 0.)     / (SRp - S_star);
-				fcav[RHO_U_A] = (S_star * (SRp * uo * 0. - fcav[RHO_U_A]) + 0. * SRp * (po + ro * (SRp - uo) * (S_star - uo)) * 1.)     / (SRp - S_star);
-				fcav[RHO_E_A] = (S_star * (SRp * uo * 0. - fcav[RHO_E_A]) + 0. * SRp * (po + ro * (SRp - uo) * (S_star - uo)) * S_star) / (SRp - S_star);*/
-				/*fcav[RHO_A] = 0.;
-				fcav[RHO_U_A] = 0.;
-				fcav[RHO_E_A] = 0.;*/
+	if (use_WAF)
+	{
+		double dt_dx = dt[i] / (x[i + 1] - x[i]);
+		if (!contact)
+		{
+			vector < adouble > c_k(4);
+			c_k[0] = -1.;
+			c_k[3] = 1.;
+			c_k[1] = min (max (dt_dx * SLm, c_k[0]), c_k[3]);
+			c_k[2] = min (max (dt_dx * SRp, c_k[0]), c_k[3]);
+
+			vector < adouble > beta_k(3);
+			for (int k = 0; k < 3; ++k)
+				beta_k[k] = 0.5 * (c_k[k + 1] - c_k[k]);
+
+			fcav[RHO_A] =   beta_k[0] * FL[RHO_A]   + beta_k[1] * FHLLE[RHO_A]   + beta_k[2] * FR[RHO_A];
+			fcav[RHO_U_A] = beta_k[0] * FL[RHO_U_A] + beta_k[1] * FHLLE[RHO_U_A] + beta_k[2] * FR[RHO_U_A];
+			fcav[RHO_E_A] = beta_k[0] * FL[RHO_E_A] + beta_k[1] * FHLLE[RHO_E_A] + beta_k[2] * FR[RHO_E_A];
+		}
+		if (contact)
+		{
+			auto sign = [](adouble a) {if (a < 0.) return -1.; else if (a > 0.) return 1.; else return 0.; };
+			vector < adouble > c_k(5);
+			c_k[0] = -1.;
+			c_k[4] = 1.;
+			c_k[1] = min(max(dt_dx * SLm, c_k[0]), c_k[4]);
+			c_k[2] = min(max(dt_dx * S_star, c_k[0]), c_k[4]);
+			c_k[3] = min(max(dt_dx * SRp, c_k[0]), c_k[4]);
+
+			bool debug = false;
+
+			if (debug)
+				cout << "r_k\ti = " << i << "\t";
+			vector < adouble > r_k(5);
+			for (int k = 0; k < r_k.size(); ++k)
+			{
+				double upw_rho = 0.;
+				double loc_rho = 0.;
+
+				if (c_k[k] > 0)
+					upw_rho = fv[RHO][i] - fv[RHO][i - 1];
+				else
+					upw_rho = fv[RHO][i + 2] - fv[RHO][i + 1];
+
+				loc_rho = fv[RHO][i + 1] - fv[RHO][i];
+				if (loc_rho == 0.)
+					r_k[k] = 0.;
+				else
+					r_k[k] = upw_rho / loc_rho;
+
+				if (debug)
+					cout << r_k[k] << "\t";
 			}
-			else {
-				/*fcav[RHO_A] = (0. * ro * uo * SRp - r * u * SLm + SLm * SRp * (x[RHO_A] - 0. * ro)) / (SRp - SLm);
-				fcav[RHO_U_A] = (0. * (ro * uo * uo + po) * SRp - (r * u * u + p_) * SLm + SLm * SRp * (x[RHO_U_A] - 0. * ro * uo)) / (SRp - SLm);
-				fcav[RHO_E_A] = (0. * ro * ho * uo * SRp - r * h * u * SLm + SLm * SRp * (x[RHO_E_A] - 0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo))) / (SRp - SLm);*/
+			if (debug)
+				cout << "\n";
 
-				fcav[RHO_A] =   (S_star * (SRp * r - r * u)   + SRp * (p_ + r * (SRp - u) * (S_star - u)) * 0.) / (SRp - S_star);
-				fcav[RHO_U_A] = (S_star * (SRp * r * u - (r * u * u + p_)) + SRp * (p_ + r * (SRp - u) * (S_star - u)) * 1.) / (SRp - S_star);
-				fcav[RHO_E_A] = (S_star * (SRp * r * (h - p_ / r) - r * h * u) + SRp * (p_ + r * (SRp - u) * (S_star - u)) * S_star) / (SRp - S_star);
+			vector < adouble > fi_k(5);
+			for (int k = 0; k < fi_k.size(); ++k)
+			{
+				if (r_k[k] <= 0.)
+					fi_k[k] = 1.;
+				else if (r_k[k] >= 0. && r_k[k] <= 0.5)
+					fi_k[k] = 1. - 2. * (1. - abs(c_k[k])) * r_k[k];
+				else if (r_k[k] >= 0.5 && r_k[k] <= 1.)
+					fi_k[k] = abs(c_k[k]);
+				else if (r_k[k] >= 1. && r_k[k] <= 2.)
+					fi_k[k] = 1. - (1. - abs(c_k[k])) * r_k[k];
+				else if (r_k[k] >= 2.)
+					fi_k[k] = 2. * abs(c_k[k]) - 1.;
+			}
+
+			vector < adouble > beta_k(4);
+			for (int k = 0; k < 4; ++k)
+				beta_k[k] = 0.5 * (c_k[k + 1] - c_k[k]);
+
+			if (false)
+			{
+				fcav[RHO_A] = beta_k[0] * FL[RHO_A] + beta_k[1] * FL_s[RHO_A] + beta_k[2] * FR_s[RHO_A] + beta_k[3] * FR[RHO_A];
+				fcav[RHO_U_A] = beta_k[0] * FL[RHO_U_A] + beta_k[1] * FL_s[RHO_U_A] + beta_k[2] * FR_s[RHO_U_A] + beta_k[3] * FR[RHO_U_A];
+				fcav[RHO_E_A] = beta_k[0] * FL[RHO_E_A] + beta_k[1] * FL_s[RHO_E_A] + beta_k[2] * FR_s[RHO_E_A] + beta_k[3] * FR[RHO_E_A];
+			}
+			else
+			{
+				fcav[RHO_A] = 0.5 * (FL[RHO_A] + FR[RHO_A]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[RHO_A] - FL[RHO_A]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[RHO_A] - FL_s[RHO_A]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[RHO_A] - FR_s[RHO_A]);
+				fcav[RHO_U_A] = 0.5 * (FL[RHO_U_A] + FR[RHO_U_A]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[RHO_U_A] - FL[RHO_U_A]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[RHO_U_A] - FL_s[RHO_U_A]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[RHO_U_A] - FR_s[RHO_U_A]);
+				fcav[RHO_E_A] = 0.5 * (FL[RHO_E_A] + FR[RHO_E_A]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[RHO_E_A] - FL[RHO_E_A]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[RHO_E_A] - FL_s[RHO_E_A]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[RHO_E_A] - FR_s[RHO_E_A]);
 			}
 		}
 	}

@@ -494,8 +494,11 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 
 	double rho_[2] = { 1, 0.125 };
 	double u_[2] = { 0.75, 0. };
+	//double rho_[2] = { 1, 1. };
+	//double u_[2] = { -19.59745, -19.59745 };
 	double mass_[2];
 	double p_[2] = { 1., 0.1 };
+	//double p_[2] = { 1000., 0.01 };
 	double e_[2];
 
 	for (int i = 0; i < 2; ++i) {
@@ -513,7 +516,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	cusp_s->grid.PrintWholeRow("Output/RemeshedCoords.txt", cusp_s->grid.GetCoordinates());
 
 	// Parameters to adjust mesh were used
-	for (int i = 0; i < 100; ++i) {
+	for (int i = 0; i < 100 && cusp_s->remesh; ++i) {
 		double relax_coef = i < 300 ? 0.5
 			: i < 500 ? 0.2
 			: i < 1700 ? 0.05
@@ -565,7 +568,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	double ttime = 0.;
 	if (cusp_s->time_stepping == 0) {
 		//while (ttime < 0.2 / 1. * 1.) {
-		while (ttime < 0.2e-2 * fac * 1000.) {
+		while (ttime < 0.2e-2 * fac * 1000. || ttime < 0.075) {
 			//while (cusp_s->Global_Time < 0.2*50) {
 			cusp_s->iter = 0;
 			drho = 1.;
