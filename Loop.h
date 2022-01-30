@@ -12,7 +12,7 @@ using namespace Eigen;
 using Eigen::SparseMatrix;
 
 typedef double Scalar;
-typedef Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Vector;
+//typedef Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Vector;
 
 class Loop : public DataBase {
 public:
@@ -32,7 +32,7 @@ public:
 	vector <double>& GetConcentrationRef() { return n; };
 	void CalculateConcentrationWave();
 	SparseMatrix< double > ILU_0(SparseMatrix< double >& SM);
-	Vector SolveFromLU(SparseMatrix<double>& LU, Vector& b);
+	Vector<Scalar, Dynamic> SolveFromLU(SparseMatrix<double>& LU, Vector<Scalar, Dynamic>& b);
 	vector < double > Redistribute(string col_name, vector < double >& conc);
 	double FindArea(double* conc, double* x_, int method);
 	double FindCubicFunctionValue(double a, double b, double c, double d, double x);

@@ -193,10 +193,10 @@ SparseMatrix< double > Loop::ILU_0(SparseMatrix< double >& SM)
 	return LU;
 }
 
-Vector Loop::SolveFromLU(SparseMatrix<double>& LU, Vector& b)
+Vector<Scalar, Dynamic> Loop::SolveFromLU(SparseMatrix<double>& LU, Vector<Scalar, Dynamic>& b)
 {
 	int size_ = LU.rows();
-	Vector y(size_), x_(size_);
+	Vector<Scalar, Dynamic> y(size_), x_(size_);
 	int j_start, j_finish;
 
 	y(0) = b(0);
@@ -518,8 +518,8 @@ vector< double > Loop::RefineMesh(double dt_, double tau_, double relax_coef, ve
 	CalculateConcentrationWave();
 	//n_w = n_w;
 
-	Vector b(col_size - off);
-	Vector NewConc, check;
+	Vector<Scalar, Dynamic> b(col_size - off);
+	Vector<Scalar, Dynamic> NewConc, check;
 	S.resize(col_size - off, col_size - off);
 	S.reserve(VectorXi::Constant((col_size - off), 4));
 	//S.setZero();
