@@ -793,3 +793,283 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 
 	cout << endl << "   OK   " << endl;
 }
+
+void unsteady_sod_test(const string output_file, const double end_time_)	// Standard example as in Blazek (CUSP)
+{
+	cout << endl << "  ---  unsteady sod test  ---  " << endl;
+
+	string file_name = "Input/sod_explicit_test.yml";
+
+	Loop sod;
+	Solver* hllc_s;
+
+	hllc_s = CreateReadConfigFile(file_name);
+
+	hllc_s->HideOutput();
+
+	sod.ReadFile("Input/sod_mesh_test.txt");
+
+	hllc_s->SetGrid(sod);
+	hllc_s->ReadBoundaries("Input/sod_boundary_test.yml");
+	hllc_s->SetOutputFile(output_file);
+
+	double convtol = hllc_s->GetTolerance();
+	double drho = 1.;
+
+	int maxiter = hllc_s->GetMaxIterNum();
+	double gamma__ = hllc_s->GetGamma();
+	double cpgas_ = hllc_s->GetCp();
+	double t01_ = hllc_s->GetInflowT();
+	double p01_ = hllc_s->GetInflowP();
+	double p2_ = hllc_s->GetOutflowP();
+	int id = hllc_s->GetInflowId();
+	double section = hllc_s->GetSection()[(id > 0 ? id - 2 : id + 1)];
+
+	double gam1_ = gamma__ - 1.;	// $\gamma_ - 1$
+
+	double rho_[2] = { 1, 0.125 };
+	double u_[2] = { 0.75, 0. };
+
+	double mass_[2];
+	double p_[2] = { 1., 0.1 };
+	double e_[2];
+
+	for (int i = 0; i < 2; ++i) {
+		e_[i] = p_[i] / gam1_ / rho_[i] + 0.5 * u_[i] * u_[i];
+		mass_[i] = rho_[0] * u_[i];
+	}
+
+	double shock_pos = 0.3;
+	hllc_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+
+	// Parameters to adjust mesh were used
+	for (int i = 0; i < 100 && hllc_s->remesh; ++i) {
+		double relax_coef = i < 300 ? 0.5
+			: i < 500 ? 0.2
+			: i < 1700 ? 0.05
+			: i < 2000 ? 0.05
+			: i < 5000 ? 0.02 : 0.005;
+		hllc_s->AdjustMesh(rho_, mass_, e_, p_, shock_pos, 1.);
+	}
+	hllc_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+	hllc_s->CalculateVolumes();
+	hllc_s->grid.SetRow("volume", hllc_s->vol);
+
+	hllc_s->RhoUPH();
+	hllc_s->RefreshBoundaries();
+
+	double fac = 1. / 1e1;
+	double physDt_ = 0.2e-2 * fac / 1.;
+
+	hllc_s->cvnm1 = hllc_s->cv;
+	hllc_s->iter = 0.;
+	hllc_s->Global_Time = 0.;
+	hllc_s->cvn = hllc_s->cv;
+
+	hllc_s->S.resize((hllc_s->ib2 - 1) * hllc_s->eq_num, (hllc_s->ib2 - 1) * hllc_s->eq_num);
+	hllc_s->S.reserve(VectorXi::Constant((hllc_s->ib2 - 1) * hllc_s->eq_num, hllc_s->eq_num * hllc_s->eq_num));
+
+	hllc_s->grid.AddColumn("old_coords", hllc_s->grid.GetValues("coordinate"));
+	hllc_s->iter = 0.;
+	int iter = 0;
+	double ttime = 0.;
+	if (hllc_s->time_stepping == 0) {
+		while (ttime < end_time_) {
+			hllc_s->iter = 0;
+			drho = 1.;
+			hllc_s->calculate_mass_matrix();
+			hllc_s->fill_inverse_mass_matrix();
+
+			// For good remeshing. Interpolation of values from old grig to new one.
+			vector <double> very_old_coords = hllc_s->grid.GetCoordinates();
+			vector < double > rho_a = hllc_s->cvn[hllc_s->RHO_A];
+			vector < double > rho_u_a = hllc_s->cvn[hllc_s->RHO_U_A];
+			vector < double > rho_e_a = hllc_s->cvn[hllc_s->RHO_E_A];
+
+			vector < double > rho_a_m1 = hllc_s->cvnm1[hllc_s->RHO_A];
+			vector < double > rho_u_a_m1 = hllc_s->cvnm1[hllc_s->RHO_U_A];
+			vector < double > rho_e_a_m1 = hllc_s->cvnm1[hllc_s->RHO_E_A];
+			vector <vector <vector <double> > > cvss;
+			cvss.push_back(vector <vector <double> >());
+			cvss[0].push_back(rho_a);
+			cvss[0].push_back(rho_u_a);
+			cvss[0].push_back(rho_e_a);
+			cvss.push_back(vector <vector <double> >());
+			cvss[1].push_back(rho_a_m1);
+			cvss[1].push_back(rho_u_a_m1);
+			cvss[1].push_back(rho_e_a_m1);
+
+			hllc_s->grid.SetRow("old_coords", hllc_s->grid.GetValues("coordinate"));
+			hllc_s->cvn_old = hllc_s->cvn;
+			hllc_s->cvnm1_old = hllc_s->cvnm1;
+
+			for (int iter = 0; iter < maxiter && drho > convtol && true; ++iter)
+			{
+				drho = hllc_s->Solve(physDt_);
+			}
+
+			vector < double > cv1 = hllc_s->cv[hllc_s->RHO_A];
+			vector < double > cv2 = hllc_s->cv[hllc_s->RHO_U_A];
+			vector < double > cv3 = hllc_s->cv[hllc_s->RHO_E_A];
+			vector <double> old_coords = hllc_s->grid.GetCoordinates();
+
+			auto remesh = [&](int count, bool use_func, double tau) -> void {
+				if (hllc_s->remesh) {
+
+					// New adaptive grid
+					for (int i = 0; i < count; ++i) {
+						hllc_s->grid.SetRow("rho", hllc_s->cv[hllc_s->RHO_A]);
+						hllc_s->grid.SetRow("rhoU", hllc_s->cv[hllc_s->RHO_U_A]);
+						hllc_s->grid.SetRow("rhoE", hllc_s->cv[hllc_s->RHO_E_A]);
+
+						vector< vector <double> > functions;;
+						vector< double > Fs;
+
+						if (use_func)
+						{
+							functions.push_back(hllc_s->cvn[hllc_s->RHO_A]);
+							Fs.push_back(1.);
+						}
+
+						hllc_s->grid.CalculateResolution(1., 1., "rho", "coordinate", functions, Fs);
+						hllc_s->grid.CalculateConcentration(1., "coordinate");
+
+						hllc_s->grid.SetRow("rho", hllc_s->cv[hllc_s->RHO_A]);
+						hllc_s->grid.SetRow("rhoU", hllc_s->cv[hllc_s->RHO_U_A]);
+						hllc_s->grid.SetRow("rhoE", hllc_s->cv[hllc_s->RHO_E_A]);
+						hllc_s->grid.SetRow("coordinate", old_coords);
+
+						hllc_s->x = hllc_s->grid.RefineMesh(physDt_, tau);
+
+						hllc_s->cv[hllc_s->RHO_A] = hllc_s->grid.GetValues("rho");
+						hllc_s->cv[hllc_s->RHO_U_A] = hllc_s->grid.GetValues("rhoU");
+						hllc_s->cv[hllc_s->RHO_E_A] = hllc_s->grid.GetValues("rhoE");
+
+						hllc_s->RefreshBoundaries();						// Refresh boundary conditions
+						hllc_s->RhoUPH();
+
+						hllc_s->CalculateVolumes();
+						hllc_s->grid.SetRow("volume", hllc_s->vol);
+					}
+					// Now we will reevaluate cvn, cvnm1, cvold
+					vector < vector < vector < double > >* > cvs{ &hllc_s->cvn, &hllc_s->cvnm1/*, &hllc_s->cvold*/ };
+
+					if (count > 0)
+					{
+						int i = 0;
+						for (auto it : cvs)
+						{
+							hllc_s->grid.SetRow("coordinate", very_old_coords);
+							hllc_s->grid.SetRow("rho", cvss[i][0]);
+							hllc_s->grid.SetRow("rhoU", cvss[i][1]);
+							hllc_s->grid.SetRow("rhoE", cvss[i][2]);
+							++i;
+
+							vector < string > ignore;
+							vector < vector < double > > new_tab;
+							ignore.push_back(hllc_s->grid.TYPE_COL);
+							new_tab = hllc_s->grid.NewTable("coordinate", hllc_s->x, ignore, false);
+							hllc_s->grid.SetData(new_tab);
+
+							(*it)[hllc_s->RHO_A] = hllc_s->grid.GetValues("rho");
+							(*it)[hllc_s->RHO_U_A] = hllc_s->grid.GetValues("rhoU");
+							(*it)[hllc_s->RHO_E_A] = hllc_s->grid.GetValues("rhoE");
+						}
+
+						hllc_s->grid.SetRow("coordinate", hllc_s->x);
+						hllc_s->grid.SetRow("rho", hllc_s->cv[hllc_s->RHO_A]);
+						hllc_s->grid.SetRow("rhoU", hllc_s->cv[hllc_s->RHO_U_A]);
+						hllc_s->grid.SetRow("rhoE", hllc_s->cv[hllc_s->RHO_E_A]);
+
+						hllc_s->calculate_mass_matrix();
+						hllc_s->fill_inverse_mass_matrix();
+					}
+				}
+			};
+
+			remesh(0, false, 1e-2);
+
+			hllc_s->cvnm1 = hllc_s->cvn;
+			hllc_s->cvn = hllc_s->cv;
+
+			ttime += physDt_;
+			iter += hllc_s->iter;
+			cout << iter << "\t" << ttime << endl;
+		}
+	}
+
+	hllc_s->PrintResult();
+
+	cout << endl << "   OK   " << endl;
+}
+
+void compare_files(const string &first_file, const string &second_file, const double eps)
+{
+	FILE* file1;
+	FILE* file2;
+	char str_c_1[12] = "", str_c_2[12] = "";
+	string str_s_1, str_s_2;
+	double value_1 = 0., value_2 = 0.;
+
+	cout << "Opening first file " << "\"" << first_file.c_str() << "\"..." << endl;
+	if ((file1 = fopen(first_file.c_str(), "r")) == NULL) {
+		cout << "File \"" << first_file.c_str() << "\" wasn't opened." << endl;
+		return;
+	}
+
+	cout << "Opening second file " << "\"" << second_file.c_str() << "\"..." << endl;
+	if ((file2 = fopen(second_file.c_str(), "r")) == NULL) {
+		cout << "File \"" << second_file.c_str() << "\" wasn't opened." << endl;
+		return;
+	}
+
+	vector <string> header;
+	int col_num = 0;
+	bool is_data = false;
+	int data_count = 0;
+	int diff_count = 0;
+
+	while (!feof(file1)) {
+		fscanf(file1, "%s", str_c_1, sizeof(str_c_1));
+		if (feof(file1))
+		{
+			cout << "file1 fscanf feof" << endl;
+			break;
+		}
+		fscanf(file2, "%s", str_c_2, sizeof(str_c_2));
+		if (feof(file2))
+		{
+			cout << "file2 fscanf feof" << endl;
+			break;
+		}
+		str_s_1 = str_c_1;
+		str_s_2 = str_c_2;
+		if (isalpha(str_s_1[0]))
+			header.push_back(str_c_1);
+		else if (!is_data)
+		{
+			col_num = header.size();
+			is_data = true;
+		}
+
+		if (str_s_1 != str_s_2)
+		{
+			sscanf(str_s_1.c_str(), "%le", &value_1);
+			sscanf(str_s_2.c_str(), "%le", &value_2);
+			double diff = (value_1 - value_2) * 2. / (value_1 + value_2);
+			if (fabs(diff) > eps)
+			{
+				++diff_count;
+				int line = data_count / col_num;
+				int data_type = data_count % col_num;
+				cout << "Difference: line " << line << "; " << header[data_type] << " : " << value_1 << "\t" << value_2 << " (" << diff << ")" << endl;
+				//return;
+			}
+		}
+		if (is_data)
+			++data_count;
+	}
+	if (diff_count == 0)
+		cout << "Files coincide" << endl;
+	cout << "Comparison is finished" << endl;
+}

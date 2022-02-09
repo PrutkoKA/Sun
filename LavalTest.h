@@ -40,6 +40,10 @@ void Laval6();
 
 void Laval7();
 
+void unsteady_sod_test(const string output_file = "Output/sod_test_result.txt", const double end_time_ = 0.02);
+
+void compare_files(const string& first_file, const string& second_file, const double eps = 1e-4);
+
 void Laval();
 
 void bcond();

@@ -23,7 +23,7 @@ void algo(int n, const adept::adouble* x, int m, adept::adouble* y);
 //	double* Y_ad,          // Input-output adjoint
 //	double x_ad[2]);
 
-int main()
+int main(int argc, char* argv[])
 {
 	//int in;
 	////MatrixReplacement A;
@@ -63,7 +63,19 @@ int main()
 
 	//Laval6();		// Unsteady
 
-	Laval7();		// Unsteady + Frid
+	string arg1;
+	if (argc > 1)
+		arg1 = argv[1];
+	if (arg1 == "test")
+	{
+		string output_file = "Output/sod_test_result.txt";
+		unsteady_sod_test(output_file);
+		compare_files(output_file, "Test_results/sod_test_result.txt");
+		
+		return 0;
+	}
+
+	Laval7();		// Unsteady + Grid
 
 	//Grid();
 

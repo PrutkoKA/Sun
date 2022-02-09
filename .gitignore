@@ -1418,3 +1418,13 @@ x64/Release/Sun.vcxproj.FileListAbsolute.txt
 Output/
 
 *.vcxproj
+
+Eigen/
+
+EigenOld/
+
+x64/
+
+log
+
+*.exe
