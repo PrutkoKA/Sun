@@ -317,7 +317,7 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 
 	//			FL case								FR case
 	if ( (SLm >= 0. && direction > 0.) || (SRp <= 0. && direction < 0.) || use_WAF) {
-		vector<adept::adouble> fcav_copy = construct_flux_array(field_vars);
+		vector<adept::adouble> fcav_copy = construct_side_flux_array(field_vars);
 		copy(fcav_copy.begin(), fcav_copy.end(), fcav);
 		if (use_WAF)
 		{
@@ -325,44 +325,34 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 				FL.assign(fcav, fcav + eq_num);
 			else
 				FR.assign(fcav, fcav + eq_num);
-		}	
+		}
 	}
 
 	if (!contact)
 	{
 		// FHLLE
 		if ((SLm <= 0. && SRp >= 0.) || use_WAF) {
-			if (direction > 0.) {
-				fcav[RHO_A] = (r * u * SRp - 0. * ro * uo * SLm + SLm * SRp * (0. * ro - x_[RHO_A])) / (SRp - SLm);
-				fcav[RHO_U_A] = ((r * u * u + p_) * SRp - 0. * (ro * uo * uo + po) * SLm + SLm * SRp * (0. * ro * uo - x_[RHO_U_A])) / (SRp - SLm);
-				fcav[RHO_E_A] = (r * h * u * SRp - 0. * ro * ho * uo * SLm + SLm * SRp * (0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo) - x_[RHO_E_A])) / (SRp - SLm);
-			}
-			else {
-				fcav[RHO_A] = (0. * ro * uo * SRp - r * u * SLm + SLm * SRp * (x_[RHO_A] - 0. * ro)) / (SRp - SLm);
-				fcav[RHO_U_A] = (0. * (ro * uo * uo + po) * SRp - (r * u * u + p_) * SLm + SLm * SRp * (x_[RHO_U_A] - 0. * ro * uo)) / (SRp - SLm);
-				fcav[RHO_E_A] = (0. * ro * ho * uo * SRp - r * h * u * SLm + SLm * SRp * (x_[RHO_E_A] - 0. * (po / (gamma_ - 1.) + 0.5 * ro * uo * uo))) / (SRp - SLm);
-			}
+			vector<adept::adouble> fcav_copy = construct_hlle_flux_array(field_vars, SLm, SRp, direction);
+			copy(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
 				FHLLE.assign(fcav, fcav + eq_num);
 		}
 	}
 	else
 	{
-		// FL*
-		if (((SLm <= 0. && S_star >= 0.) || use_WAF) && direction > 0.) {
-			fcav[RHO_A] =   (S_star * (SLm * r - r * u)   + SLm * (p_ + r * (SLm - u) * (S_star - u)) * 0.)     / (SLm - S_star);
-			fcav[RHO_U_A] = (S_star * (SLm * r * u - (r * u * u + p_)) + SLm * (p_ + r * (SLm - u) * (S_star - u)) * 1.)     / (SLm - S_star);
-			fcav[RHO_E_A] = (S_star * (SLm * r * (h - p_ / r) - r * h * u) + SLm * (p_ + r * (SLm - u) * (S_star - u)) * S_star) / (SLm - S_star);
+		// FHLLC
+		//							FL*	case										FR* case
+		if ( ((SLm <= 0. && S_star >= 0. && direction > 0.) || ((S_star <= 0. && SRp >= 0. && direction < 0.) || use_WAF)) )
+		{
+			vector<adept::adouble> fcav_copy = construct_hllc_flux_array(field_vars, SLm, SRp, S_star, direction);
+			copy(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
-				FL_s.assign(fcav, fcav + eq_num);
-		}
-		// FR*
-		if (((S_star <= 0. && SRp >= 0.) || use_WAF) && direction < 0.) {
-			fcav[RHO_A] =   (S_star * (SRp * r - r * u)   + SRp * (p_ + r * (SRp - u) * (S_star - u)) * 0.) / (SRp - S_star);
-			fcav[RHO_U_A] = (S_star * (SRp * r * u - (r * u * u + p_)) + SRp * (p_ + r * (SRp - u) * (S_star - u)) * 1.) / (SRp - S_star);
-			fcav[RHO_E_A] = (S_star * (SRp * r * (h - p_ / r) - r * h * u) + SRp * (p_ + r * (SRp - u) * (S_star - u)) * S_star) / (SRp - S_star);
-			if (use_WAF)
-				FR_s.assign(fcav, fcav + eq_num);
+			{
+				if (direction > 0.)
+					FL_s.assign(fcav, fcav + eq_num);
+				else
+					FR_s.assign(fcav, fcav + eq_num);
+			}
 		}
 	}
 
@@ -490,3 +480,76 @@ const vector < double >& HLLE::GetDissBlend()
 void HLLE::Dissipation(double beta) {}
 
 void HLLE::GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple) {}
+
+vector<adept::adouble> HLLE::construct_hlle_flux_array(const vector<adept::adouble>& vars, const adept::adouble SLm, const adept::adouble SRp, const double direction)
+{
+	vector<adept::adouble> flux(eq_num);
+	unsigned int eq = 0;
+	for (const auto& equation : equations)
+	{
+		for (const auto& dx_term : equation.cur_dx)
+		{
+			adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
+			for (const auto& var : dx_term)
+			{
+				term *= vars[var];
+			}
+			flux[eq] += term;
+		}
+		for (const auto& dt_term : equation.cur_dt)
+		{
+			adept::adouble term = -SRp * SLm * direction;
+			for (const auto& var : dt_term)
+			{
+				if (var == H)
+					term *= (vars[var] - vars[P] / vars[RHO]);
+				else
+					term *= vars[var];
+			}
+			flux[eq] += term;
+		}
+		flux[eq] /= (SRp - SLm);
+		++eq;
+	}
+	return flux;
+}
+
+vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adouble>& vars, const adept::adouble SLm, const adept::adouble SRp, const adept::adouble S_star, const double direction)
+{
+	vector<adept::adouble> flux(eq_num);
+	vector<adept::adouble> D_star = { 0., 1., S_star };
+	adept::adouble S_K = (direction > 0. ? SLm : SRp);
+	adept::adouble p_star = S_K * (vars[P] + vars[RHO] * (S_K - vars[U]) * (S_star - vars[U]));
+
+	unsigned int eq = 0;
+	for (const auto& equation : equations)
+	{
+		for (const auto& dt_term : equation.cur_dt)
+		{
+			adept::adouble term = (direction > 0. ? SLm : SRp);
+			for (const auto& var : dt_term)
+			{
+				if (var == H)
+					term *= (vars[var] - vars[P] / vars[RHO]);
+				else
+					term *= vars[var];
+			}
+			flux[eq] += term;
+		}
+		for (const auto& dx_term : equation.cur_dx)
+		{
+			adept::adouble term = -1.;
+			for (const auto& var : dx_term)
+			{
+				term *= vars[var];
+			}
+			flux[eq] += term;
+		}
+		flux[eq] *= S_star;
+		flux[eq] += p_star * D_star[eq];
+		
+		flux[eq] /= (S_K - S_star);
+		++eq;
+	}
+	return flux;
+}

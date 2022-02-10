@@ -2762,7 +2762,7 @@ int count_(vector < int >& vec, int val)
 	return count(vec.begin(), vec.end(), val);
 }
 
-vector<adept::adouble> Solver::construct_flux_array(const vector<adept::adouble>& vars)
+vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::adouble>& vars)
 {
 	vector<adept::adouble> flux(eq_num);
 	unsigned int eq = 0;

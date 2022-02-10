@@ -293,7 +293,7 @@ public:
 	//void FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s);
 	void FillJacobian(MatrixXd& M_SGS, vector < double >& jac, double s);
 
-	vector<adept::adouble> construct_flux_array(const vector<adept::adouble>& vars);
+	vector<adept::adouble> construct_side_flux_array(const vector<adept::adouble>& vars);
 
 	virtual void deactivate_adept_stack() = 0;
 
