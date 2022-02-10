@@ -274,41 +274,14 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	u = x_[RHO_U_A] / x_[RHO_A];
 	p_ = (gamma_ - 1.) * (x_[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
 
-	//fv[H][i] = gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2);
-
-	//if (direction > 0)
-	//{
-	//	r = fv[RHO][i];
-	//	u = fv[U][i];
-	//	p_ = fv[P][i];
-	//}
-	//else
-	//{
-	//	r = fv[RHO][i + 1];
-	//	u = fv[U][i + 1];
-	//	p_ = fv[P][i + 1];
-	//}
-
-	
 	c = sqrt(gamma_ * p_ / r);
 	h = gamma_ / (gamma_ - 1.) * p_ / r + 0.5 * pow(u, 2);
+
+	vector<adept::adouble> field_vars = { r, u, p_, h };
 
 	ro = (direction > 0 ? rs[RHO][i] : ls[RHO][i]);
 	uo = (direction > 0 ? rs[U][i] : ls[U][i]);
 	po = (direction > 0 ? rs[P][i] : ls[P][i]);
-
-	//if (direction < 0)
-	//{
-	//	ro = fv[RHO][i];
-	//	uo = fv[U][i];
-	//	po = fv[P][i];
-	//}
-	//else
-	//{
-	//	ro = fv[RHO][i + 1];
-	//	uo = fv[U][i + 1];
-	//	po = fv[P][i + 1];
-	//}
 
 	co = sqrt(gamma_ * po / ro);
 	ho = gamma_ / (gamma_ - 1.) * po / ro + 0.5 * pow(uo, 2);
@@ -342,32 +315,19 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	fcav[RHO_U_A] = 0.;
 	fcav[RHO_E_A] = 0.;
 
-	// FL
-	if ((SLm >= 0. || use_WAF) && direction > 0.) {
-		fcav[RHO_A] = r * u;
-		fcav[RHO_U_A] = r * u * u + p_;
-		fcav[RHO_E_A] = r * h * u;
-
-		/*fcav[RHO_A] = fv[RHO][i] * fv[U][i];
-		fcav[RHO_U_A] = fv[RHO][i] * fv[U][i] * fv[U][i] + fv[P][i];
-		fcav[RHO_E_A] = fv[RHO][i] * fv[H][i] * fv[U][i];*/
-
+	//			FL case								FR case
+	if ( (SLm >= 0. && direction > 0.) || (SRp <= 0. && direction < 0.) || use_WAF) {
+		vector<adept::adouble> fcav_copy = construct_flux_array(field_vars);
+		copy(fcav_copy.begin(), fcav_copy.end(), fcav);
 		if (use_WAF)
-			FL.assign (fcav, fcav + eq_num);
+		{
+			if (direction > 0.)
+				FL.assign(fcav, fcav + eq_num);
+			else
+				FR.assign(fcav, fcav + eq_num);
+		}	
 	}
-	// FR
-	if ((SRp <= 0. || use_WAF) && direction < 0.) {
-		fcav[RHO_A] = r * u;
-		fcav[RHO_U_A] = r * u * u + p_;
-		fcav[RHO_E_A] = r * h * u;
 
-		/*fcav[RHO_A] = fv[RHO][i+1] * fv[U][i+1];
-		fcav[RHO_U_A] = fv[RHO][i+1] * fv[U][i+1] * fv[U][i+1] + fv[P][i+1];
-		fcav[RHO_E_A] = fv[RHO][i+1] * fv[H][i+1] * fv[U][i+1];*/
-
-		if (use_WAF)
-			FR.assign(fcav, fcav + eq_num);
-	}
 	if (!contact)
 	{
 		// FHLLE
@@ -495,8 +455,6 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 			}
 		}
 	}
-
-	//fcav[N_A] = x[N_A];
 }
 
 void HLLE::ComputePositiveFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i)

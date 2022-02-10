@@ -39,6 +39,10 @@ public:
 
 	virtual void GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple = false);
 	// virtual void Fluxes();
+	virtual void deactivate_adept_stack()
+	{
+		stack.deactivate();
+	};
 
 private:
 	vector < vector < double > > ls;

@@ -73,6 +73,8 @@ Solver::Solver(sol_struct& sol_init_) :
 		cout << coef_ << "   ";
 
 	cout << endl;
+	cout << (time_expl ? "Explicit solver\n" : "Implicit solver\n");
+	cout << (steadiness ? "Steady problem\n" : "Unsteady problem\n");
 
 	RK_stages_num = RK_stage_coeffs.size();
 
@@ -2165,9 +2167,7 @@ void Solver::RhoUPH()
 		fv[RHO][i] = cv[0][i] / a[i];
 		fv[U][i] = cv[1][i] / cv[0][i];
 		fv[P][i] = p[i];
-		//fv[P][i] = (gamma_ - 1.)* (cv[RHO_E_A][i] / a[i] - 0.5 * cv[RHO_U_A][i] / a[i] * cv[RHO_U_A][i] / a[i] * a[i] / cv[RHO_A][i]);
 		fv[H][i] = gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2);
-		//fv[n][i] = cv[N_A][i] / a[i];
 	}
 }
 
@@ -2760,4 +2760,24 @@ double Sign(double value)
 int count_(vector < int >& vec, int val)
 {
 	return count(vec.begin(), vec.end(), val);
+}
+
+vector<adept::adouble> Solver::construct_flux_array(const vector<adept::adouble>& vars)
+{
+	vector<adept::adouble> flux(eq_num);
+	unsigned int eq = 0;
+	for (const auto &equation : equations)
+	{
+		for (const auto &dx_term : equation.cur_dx)
+		{
+			adept::adouble term = 1.;
+			for (const auto& var : dx_term)
+			{
+				term *= vars[var];
+			}
+			flux[eq] += term;
+		}
+		++eq;
+	}
+	return flux;
 }

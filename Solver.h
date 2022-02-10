@@ -79,11 +79,11 @@ public:
 		n*/
 	};
 
-	/*enum Vars {
+	enum Vars {
 		RHO_A,
 		RHO_U_A,
 		RHO_E_A
-	};*/
+	};
 
 	double omega = 1.;
 	double beta = 2;
@@ -104,10 +104,11 @@ public:
 
 	int time_stepping;
 
-	int RHO_A = 0,
-		RHO_U_A = 1,
-		RHO_E_A = 2/*,
-		N_A = 3*/;
+	//int RHO_A = 0,
+	//	RHO_U_A = 1,
+	//	RHO_E_A = 2/*,
+		//N_A = 3*/;
+		//N_A = 3*/;
 
 	struct equation
 	{
@@ -292,6 +293,10 @@ public:
 	//void FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s);
 	void FillJacobian(MatrixXd& M_SGS, vector < double >& jac, double s);
 
+	vector<adept::adouble> construct_flux_array(const vector<adept::adouble>& vars);
+
+	virtual void deactivate_adept_stack() = 0;
+
 	Loop grid;
 private:
 	//Loop grid;
@@ -330,7 +335,6 @@ private:
 	vector < double > bk;
 	vector < double > ck;
 	vector < vector < double > > alpha;
-
 };
 
 Solver* CreateReadConfigFile(string file_name);

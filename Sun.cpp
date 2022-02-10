@@ -68,9 +68,39 @@ int main(int argc, char* argv[])
 		arg1 = argv[1];
 	if (arg1 == "test")
 	{
-		string output_file = "Output/sod_test_result.txt";
-		unsteady_sod_test(output_file);
-		compare_files(output_file, "Test_results/sod_test_result.txt");
+		string arg2 = argc > 2 ? argv[2] : "";
+		string arg3 = argc > 3 ? argv[3] : "";
+		cout << "Test parameters: " << arg1 << " " << arg2 << " " << arg3 << endl;
+		if (arg2 == "explicit" || arg2 == "")
+		{
+			if (arg3 == "hllc" || arg3 == "")
+			{
+				string output_file = "Output/sod_explicit_hllc_test_result.txt";
+				unsteady_sod_test(output_file, "Input/sod_explicit_hllc_test.yml");
+				compare_files(output_file, "Test_results/sod_explicit_hllc_test_result.txt");
+			}
+			if (arg3 == "hlle" || arg3 == "")
+			{
+				string output_file = "Output/sod_explicit_hlle_test_result.txt";
+				unsteady_sod_test(output_file, "Input/sod_explicit_hlle_test.yml");
+				compare_files(output_file, "Test_results/sod_explicit_hlle_test_result.txt");
+			}
+		}
+		if (arg2 == "implicit" || arg2 == "")
+		{
+			if (arg3 == "hllc" || arg3 == "")
+			{
+				string output_file = "Output/sod_implicit_hllc_test_result.txt";
+				unsteady_sod_test(output_file, "Input/sod_implicit_hllc_test.yml");
+				compare_files(output_file, "Test_results/sod_implicit_hllc_test_result.txt");
+			}
+			if (arg3 == "hlle" || arg3 == "")
+			{
+				string output_file = "Output/sod_implicit_hlle_test_result.txt";
+				unsteady_sod_test(output_file, "Input/sod_implicit_hlle_test.yml");
+				compare_files(output_file, "Test_results/sod_implicit_hlle_test_result.txt");
+			}
+		}
 		
 		return 0;
 	}

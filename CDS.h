@@ -27,7 +27,10 @@ public:
 	virtual void RHS(int i);
 	virtual void ComputeRHSandJacobian(bool NO_JAC = false);
 	virtual void GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple = false);
-
+	virtual void deactivate_adept_stack()
+	{
+		// do nothing
+	};
 
 private:
 	vector < double > diss_blend;		///< dissipation blending coeffs for different stages

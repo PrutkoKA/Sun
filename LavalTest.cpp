@@ -1,4 +1,5 @@
 #include "LavalTest.h"
+#include <ctime>
 
 void Laval2()	// Standard example as in Blazek (Central scheme)
 {
@@ -794,11 +795,11 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	cout << endl << "   OK   " << endl;
 }
 
-void unsteady_sod_test(const string output_file, const double end_time_)	// Standard example as in Blazek (CUSP)
+void unsteady_sod_test(const string &output_file, const string& yml_file, const double end_time_)	// Standard example as in Blazek (CUSP)
 {
 	cout << endl << "  ---  unsteady sod test  ---  " << endl;
 
-	string file_name = "Input/sod_explicit_test.yml";
+	string file_name = yml_file;
 
 	Loop sod;
 	Solver* hllc_s;
@@ -873,6 +874,8 @@ void unsteady_sod_test(const string output_file, const double end_time_)	// Stan
 	hllc_s->iter = 0.;
 	int iter = 0;
 	double ttime = 0.;
+
+	double start_time = clock();
 	if (hllc_s->time_stepping == 0) {
 		while (ttime < end_time_) {
 			hllc_s->iter = 0;
@@ -997,8 +1000,9 @@ void unsteady_sod_test(const string output_file, const double end_time_)	// Stan
 			cout << iter << "\t" << ttime << endl;
 		}
 	}
-
+	cout << "Execution time: " << (clock() - start_time) / CLOCKS_PER_SEC << "sec." << endl;
 	hllc_s->PrintResult();
+	hllc_s->deactivate_adept_stack();
 
 	cout << endl << "   OK   " << endl;
 }
@@ -1007,7 +1011,7 @@ void compare_files(const string &first_file, const string &second_file, const do
 {
 	FILE* file1;
 	FILE* file2;
-	char str_c_1[12] = "", str_c_2[12] = "";
+	char str_c_1[20] = "\0", str_c_2[20] = "\0";
 	string str_s_1, str_s_2;
 	double value_1 = 0., value_2 = 0.;
 
@@ -1030,22 +1034,26 @@ void compare_files(const string &first_file, const string &second_file, const do
 	int diff_count = 0;
 
 	while (!feof(file1)) {
-		fscanf(file1, "%s", str_c_1, sizeof(str_c_1));
 		if (feof(file1))
 		{
 			cout << "file1 fscanf feof" << endl;
 			break;
 		}
-		fscanf(file2, "%s", str_c_2, sizeof(str_c_2));
+		else
+			fscanf(file1, "%s", str_c_1, sizeof(str_c_1));
+
 		if (feof(file2))
 		{
 			cout << "file2 fscanf feof" << endl;
 			break;
 		}
+		else
+			fscanf(file2, "%s", str_c_2, sizeof(str_c_2));
+
 		str_s_1 = str_c_1;
 		str_s_2 = str_c_2;
 		if (isalpha(str_s_1[0]))
-			header.push_back(str_c_1);
+			header.push_back(str_s_1);
 		else if (!is_data)
 		{
 			col_num = header.size();

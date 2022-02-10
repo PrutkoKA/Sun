@@ -38,6 +38,10 @@ public:
 	void SetFluxes(int i, vector < double >& fluxp, vector < double >& fluxn);
 	void SetRHS();
 	// virtual void Fluxes();
+	virtual void deactivate_adept_stack()
+	{
+		stack.deactivate();
+	};
 
 private:
 	vector < vector < double > > ls;
