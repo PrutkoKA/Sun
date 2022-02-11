@@ -82,31 +82,22 @@ Solver::Solver(sol_struct& sol_init_) :
 	SetEquation("impulse", "RhoUA", "(RhoUU+p)A", vars, vars_o);
 	SetEquation("energy", "RhoEA", "RhoHUA", vars, vars_o);
 
-	eq_term RhoA_ (operation::plus, "RhoA", 1.);
-	eq_term rev_A (operation::div, "A", 1.);
-	vector<eq_term> Rho_eq = { RhoA_, rev_A };
-	set_fv_equation("Rho", Rho_eq);
-
-	eq_term RhoUA_(operation::plus, "RhoUA", 1.);
-	eq_term rev_RhoA_(operation::div, "RhoA", 1.);
-	vector<eq_term> U_eq = { RhoUA_, rev_RhoA_ };
-	set_fv_equation("U", U_eq);
-
-	eq_term RhoEA_(operation::plus, "RhoEA", 1.);
-	eq_term M_U2_05_(operation::minus, "U", 2., 0.5);
-	eq_term GAMMAM1_(operation::mult, "GAMMAM1", 1.);
-	eq_term RHO_(operation::mult, "RHO", 1.);
-	vector<eq_term> P_eq = { RhoEA_, rev_RhoA_, M_U2_05_, GAMMAM1_, RHO_ };
-	set_fv_equation("p", P_eq);
-
-	//gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2)
-	eq_term P_U2_05_(operation::plus, "U", 2., 0.5);
-	eq_term GAMMA_(operation::plus, "GAMMA", 1.);
-	eq_term rev_GAMMAM1_(operation::div, "GAMMAM1", 1.);
-	eq_term P_(operation::mult, "P", 1.);
-	eq_term rev_RHO_(operation::div, "RHO", 1.);
-	vector<eq_term> H_eq = { GAMMA_, rev_GAMMAM1_, P_, rev_RHO_, P_U2_05_ };
-	set_fv_equation("H", H_eq);
+	set_fv_equation(
+		"Rho", 
+		{ "RhoA", "\\A", ""}		// There is dummy for unambiguous conservation
+	);
+	set_fv_equation(
+		"U", 
+		{ "RhoUA", "\\RhoA", ""}
+	);
+	set_fv_equation(
+		"p", 
+		{ "RhoEA", "\\RhoA", "-0.5U^2", "*GAMMAM", "*RHO" }
+	);
+	set_fv_equation(
+		"H", 
+		{ "GAMMA", "\\GAMMAM", "*P", "\\RHO", "+0.5U^2" }
+	);
 }
 
 void Solver::SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_)
@@ -114,6 +105,20 @@ void Solver::SetEquation(string eq_name, string dt_term_, string dx_term_, map <
 	equations.push_back( equation (eq_name, dt_term_, dx_term_, vars_, vars_o_) );
 }
 
+void Solver::set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s)
+{
+	vector<eq_term> eq_terms;
+
+	eq_terms.reserve(eq_terms_s.size());
+
+	for (auto& term_s : eq_terms_s)
+		if (term_s.size() == 0)
+			continue;
+		else
+			eq_terms.push_back(term_s);
+
+	set_fv_equation(eq_name, eq_terms);
+}
 void Solver::set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms)
 {
 	fv_equation.insert(pair<string, vector<eq_term>>(eq_name, eq_terms));
@@ -128,7 +133,7 @@ double Solver::make_fv_equation(const string& eq_name, const int point)
 	{
 		if (var_name_ == "A")
 			return a[point];
-		if (var_name_ == "GAMMAM1")
+		if (var_name_ == "GAMMAM")
 			return gamma - 1.;
 		if (var_name_ == "GAMMA")
 			return gamma;
@@ -2598,6 +2603,65 @@ vector < vector < int > > Solver::equation::term(string term_, map < string, int
 	}
 
 	return cur_term;
+}
+
+Solver::eq_term::eq_term(const string& term_s)
+{
+	auto get_var_name = [](const string& term_s) -> string
+	{
+		string var_name = "";
+		bool var_is_started = false;
+		for (unsigned int i = 0; i < term_s.size(); ++i)
+		{
+			if (isalpha(term_s[i]))
+			{
+				var_is_started = true;
+				var_name += term_s[i];
+			}
+			else
+			{
+				if (var_is_started)
+					break;
+			}
+		}
+		return var_name;
+	};
+	unsigned op_pos = 0;
+	name = get_var_name(term_s);
+	char sym = term_s[0];
+	switch (sym)
+	{
+	case '-':
+		op = operation::minus;
+		op_pos = 1;
+		break;
+	case '*':
+		op = operation::mult;
+		op_pos = 1;
+		break;
+	case '\\':
+		op = operation::div;
+		op_pos = 1;
+		break;
+	case '+':
+		op = operation::plus;
+		op_pos = 1;
+		break;
+	default:
+		op = operation::plus;
+		break;
+	}
+	if (!sscanf(term_s.c_str() + op_pos, "%le", &coef))
+		coef = 1.;
+	auto deg_pos = term_s.find('^');
+	if (deg_pos != string::npos)
+	{
+		if (!sscanf(term_s.c_str() + deg_pos + 1, "%le", &degree))
+
+			degree = 1.;
+	}
+	else
+		degree = 1.;
 }
 
 //void Solver::FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s)

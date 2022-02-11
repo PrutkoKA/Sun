@@ -160,6 +160,7 @@ public:
 		double coef;
 
 		eq_term(const operation op_, const string name_, const double degree_, const double coef_ = 1.) : op (op_), name(name_), degree(degree_), coef(coef_) {};
+		eq_term(const string& term_s);
 	};
 
 	using DiagonalFunc = std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int,
@@ -217,6 +218,7 @@ public:
 	Solver(sol_struct& sol_init_);
 
 	void SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
+	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	double make_fv_equation(const string& eq_name, const int point);
 
