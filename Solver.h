@@ -70,20 +70,35 @@ public:
 	//map < string, int > vars { {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
 	//map < string, int > vars_o { {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3} };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3}/*, {"n", 4}*/ };
+	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3}/*, {"n", 4}*/};
 	enum Vars_o {
 		RHO,
 		U,
 		P,
-		H/*,
+		H,
+		FIELD_VAR_COUNT/*,
 		n*/
+	};
+
+	map<int, string> var_name = {
+		{RHO, "Rho"},
+		{U, "U"},
+		{P, "p"},
+		{H, "H"}
 	};
 
 	enum Vars {
 		RHO_A,
 		RHO_U_A,
-		RHO_E_A
+		RHO_E_A,
+		CONS_VAR_COUNT
 	};
+
+	map<int, string> c_var_name = { 
+		{RHO_A, "rho"},
+		{RHO_U_A, "rhoU"},
+		{RHO_E_A, "rhoE"}
+};
 
 	double omega = 1.;
 	double beta = 2;
@@ -112,14 +127,39 @@ public:
 
 	struct equation
 	{
+		enum class term_name
+		{
+			dt,
+			dx,
+			fv
+		};
+
 		string eq_name;
 		int dt_var;
 		vector < vector < int > > cur_dt;
 		vector < vector < int > > cur_dx;
+		vector < vector < int > > cur_fv;
 
 		equation(string eq_name_, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
-		vector < vector < int > > dt_term(string dt_term_, map < string, int > vars_o);
-		vector < vector < int > > dx_term(string dx_term_, map < string, int > vars_o);
+		equation(string eq_name_, string term_, map < string, int > vars_, map < string, int > vars_o_);
+		vector < vector < int > > term(string dt_term_, map < string, int > vars_o, term_name term_name_);
+	};
+
+	enum class operation
+	{
+		plus,
+		minus,
+		mult,
+		div
+	};
+	struct eq_term
+	{
+		operation op;
+		string name;
+		double degree;
+		double coef;
+
+		eq_term(const operation op_, const string name_, const double degree_, const double coef_ = 1.) : op (op_), name(name_), degree(degree_), coef(coef_) {};
 	};
 
 	using DiagonalFunc = std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int,
@@ -132,6 +172,7 @@ public:
 	int eq_num, var_num;
 	int cur_Q;
 	vector < equation > equations;
+	map<string, vector<eq_term>> fv_equation;
 
 	vector < vector < double > > cv;
 	vector < vector < double > > fv;	// field var
@@ -176,6 +217,8 @@ public:
 	Solver(sol_struct& sol_init_);
 
 	void SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
+	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
+	double make_fv_equation(const string& eq_name, const int point);
 
 	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
 

@@ -845,11 +845,6 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 
 	// Parameters to adjust mesh were used
 	for (int i = 0; i < 100 && hllc_s->remesh; ++i) {
-		double relax_coef = i < 300 ? 0.5
-			: i < 500 ? 0.2
-			: i < 1700 ? 0.05
-			: i < 2000 ? 0.05
-			: i < 5000 ? 0.02 : 0.005;
 		hllc_s->AdjustMesh(rho_, mass_, e_, p_, shock_pos, 1.);
 	}
 	hllc_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);

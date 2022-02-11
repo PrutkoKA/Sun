@@ -81,12 +81,97 @@ Solver::Solver(sol_struct& sol_init_) :
 	SetEquation("mass", "RhoA", "RhoUA", vars, vars_o);
 	SetEquation("impulse", "RhoUA", "(RhoUU+p)A", vars, vars_o);
 	SetEquation("energy", "RhoEA", "RhoHUA", vars, vars_o);
-	//SetEquation("grid", "nA", "nA", vars, vars_o);
+
+	eq_term RhoA_ (operation::plus, "RhoA", 1.);
+	eq_term rev_A (operation::div, "A", 1.);
+	vector<eq_term> Rho_eq = { RhoA_, rev_A };
+	set_fv_equation("Rho", Rho_eq);
+
+	eq_term RhoUA_(operation::plus, "RhoUA", 1.);
+	eq_term rev_RhoA_(operation::div, "RhoA", 1.);
+	vector<eq_term> U_eq = { RhoUA_, rev_RhoA_ };
+	set_fv_equation("U", U_eq);
+
+	eq_term RhoEA_(operation::plus, "RhoEA", 1.);
+	eq_term M_U2_05_(operation::minus, "U", 2., 0.5);
+	eq_term GAMMAM1_(operation::mult, "GAMMAM1", 1.);
+	eq_term RHO_(operation::mult, "RHO", 1.);
+	vector<eq_term> P_eq = { RhoEA_, rev_RhoA_, M_U2_05_, GAMMAM1_, RHO_ };
+	set_fv_equation("p", P_eq);
+
+	//gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2)
+	eq_term P_U2_05_(operation::plus, "U", 2., 0.5);
+	eq_term GAMMA_(operation::plus, "GAMMA", 1.);
+	eq_term rev_GAMMAM1_(operation::div, "GAMMAM1", 1.);
+	eq_term P_(operation::mult, "P", 1.);
+	eq_term rev_RHO_(operation::div, "RHO", 1.);
+	vector<eq_term> H_eq = { GAMMA_, rev_GAMMAM1_, P_, rev_RHO_, P_U2_05_ };
+	set_fv_equation("H", H_eq);
 }
 
 void Solver::SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_)
 {
 	equations.push_back( equation (eq_name, dt_term_, dx_term_, vars_, vars_o_) );
+}
+
+void Solver::set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms)
+{
+	fv_equation.insert(pair<string, vector<eq_term>>(eq_name, eq_terms));
+}
+
+double Solver::make_fv_equation(const string& eq_name, const int point)
+{
+	auto& eq_terms = fv_equation.at(eq_name);
+	operation op = eq_terms[0].op;
+	string var_name_ = eq_terms[0].name;
+	auto get_value = [this, point](const string& var_name_) -> double 
+	{
+		if (var_name_ == "A")
+			return a[point];
+		if (var_name_ == "GAMMAM1")
+			return gamma - 1.;
+		if (var_name_ == "GAMMA")
+			return gamma;
+		if (vars.find(var_name_) != vars.end())
+			return cv[vars[var_name_]][point];
+		else
+			return fv[vars_o[var_name_]][point];
+	};
+	double value = get_value(var_name_);
+	double degree = eq_terms[0].degree;
+	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+	double coef = eq_terms[0].coef;
+	double term = (op == operation::plus ? coef : -coef) * value;
+	auto eq_terms_it = eq_terms.begin();
+	++eq_terms_it;
+	while (eq_terms_it != eq_terms.end())
+	{
+		op = (*eq_terms_it).op;
+		var_name_ = (*eq_terms_it).name;
+		value = get_value(var_name_);
+		degree = (*eq_terms_it).degree;
+		coef = (*eq_terms_it).coef;
+		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+		switch (op)
+		{
+		case Solver::operation::plus:
+			term += value;
+			break;
+		case Solver::operation::minus:
+			term -= value;
+			break;
+		case Solver::operation::mult:
+			term *= value;
+			break;
+		case Solver::operation::div:
+			term /= value;
+			break;
+		default:
+			break;
+		}
+		++eq_terms_it;
+	}
+	return term;
 }
 
 void Solver::ReadBoundaries(string file_name)
@@ -283,34 +368,19 @@ void Solver::InitFlowAG(double* rho_, double* mass_, double* e_, double* p_, dou
 		p[i] = p_[id];
 	}
 
-	grid.AddColumn("rho", cv[RHO_A]);
-	grid.AddColumn("rhoU", cv[RHO_U_A]);
-	grid.AddColumn("rhoE", cv[RHO_E_A]);
-	grid.CalculateResolution(1., 1., "rho", "coordinate");
+	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
+		grid.AddColumn(c_var_name[var], cv[var]);
+
+	grid.CalculateResolution(1., 1., c_var_name[RHO_A], "coordinate");
 	grid.CalculateConcentration(1., "coordinate");
 	Res = grid.GetResolution();
 	Conc = grid.GetConcentration();
 	double alpha_ = grid.GetAlpha();
-	//for (int i = 1; i < ib2; ++i)
-	//{	
-	//	cv[N_A][i] = Conc[i] * a[i]; // (Conc[i] - alpha_ * (alpha_ + 1.) * (Conc[i + 1] - 2. * Conc[i] + Conc[i - 1])) / Res[i];
-	//}
-	//cv[N_A][0] = cv[N_A][1];
-	//cv[N_A][imax - 1] = cv[N_A][ib2 - 1];
 
-	//if (bk.size() > 0) {
 	if (!time_expl) {
 		L_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		/*vector < vector < double > > (eq_num,
-			vector < double > (eq_num, 0)));*/
-
 		U_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		/*vector < vector < double > > (eq_num,
-			vector < double > (eq_num, 0)));*/
-
 		D_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		/*vector < vector < double > > (eq_num,
-			vector < double > (eq_num, 0)));*/
 	}
 }
 
@@ -1087,31 +1157,20 @@ void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, dou
 {
 	InitFlowAG2(rho_, mass_, e_, p_, x_);
 
-	grid.SetRow("rho", cv[RHO_A]);
-	grid.SetRow("rhoU", cv[RHO_U_A]);
-	grid.SetRow("rhoE", cv[RHO_E_A]);
+	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
+		grid.SetRow(c_var_name[var], cv[var]);
 
-	grid.CalculateResolution(1., 1., "rho", "coordinate");
+	grid.CalculateResolution(1., 1., c_var_name[RHO_A], "coordinate");
 	grid.CalculateConcentration(1., "coordinate");
 
 	std::vector<double> v(grid.GetConcentration().size());
 	std::iota(v.begin(), v.end(), 0.);
 	double coef = 0.5;
-	// Parameter to adjust mesh was used
-	//for (int i = 0; i < 1 && smooth; ++i)
-	//{
-	//	vector <double> smoothed_n = grid.smooth_least_square(/*grid.GetCoordinates()*/v, grid.GetConcentration(), 2, 2);
-	//	for (int j = 0; j < smoothed_n.size(); ++j)
-	//		grid.GetConcentrationRef()[j] = coef * grid.GetConcentrationRef()[j] + (1. - coef) * smoothed_n[j];
-	//}
-	//grid.SmoothN(0.5);
-
 
 	x = grid.RefineMesh(1., 10., relax_coef);
 
-	cv[RHO_A] = grid.GetValues("rho");
-	cv[RHO_U_A] = grid.GetValues("rhoU");
-	cv[RHO_E_A] = grid.GetValues("rhoE");
+	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
+		cv[var] = grid.GetValues(c_var_name[var]);
 
 	InitFlowAG2(rho_, mass_, e_, p_, x_);
 
@@ -2163,12 +2222,8 @@ void Solver::RhoUPH()
 		}
 	}
 	for (int i = 0; i < imax; ++i)
-	{
-		fv[RHO][i] = cv[0][i] / a[i];
-		fv[U][i] = cv[1][i] / cv[0][i];
-		fv[P][i] = p[i];
-		fv[H][i] = gamma_ / (gamma_ - 1.) * fv[P][i] / fv[RHO][i] + 0.5 * pow(fv[U][i], 2);
-	}
+		for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+			fv[var][i] = make_fv_equation(var_name[var], i);
 }
 
 void Solver::RhoUPH(vector < vector < double > >& cv_, vector < vector < double > >& fv_)
@@ -2491,82 +2546,58 @@ Solver::equation::equation(string eq_name_, string dt_term_, string dx_term_, ma
 {
 	eq_name = eq_name_;
 	dt_var = vars_[dt_term_];
-	cur_dt = dt_term(dt_term_, vars_o_);
-	cur_dx = dx_term(dx_term_, vars_o_);
+	cur_dt = term(dt_term_, vars_o_, term_name::dt);
+	cur_dx = term(dx_term_, vars_o_, term_name::dx);
 }
-vector < vector < int > > Solver::equation::dt_term(string dt_term_, map < string, int > vars_o)
+
+Solver::equation::equation(string eq_name_, string term_, map < string, int > vars_, map < string, int > vars_o_)
 {
-	vector < vector < int > > cur_dt;
+	eq_name = eq_name_;
+	//dt_var = vars_[dt_term_];
+	cur_fv = term(term_, vars_o_, term_name::fv);
+}
+
+vector < vector < int > > Solver::equation::term(string term_, map < string, int > vars_o, term_name term_name_)
+{
+	vector < vector < int > > cur_term;
 	int cur_pos = 0;
 	int id = 0;
 
-	if (dt_term_.find_first_of("E") != string::npos) {
-		dt_term_[dt_term_.find_first_of("E")] = 'H';
-	}
+	if (term_name_ == term_name::dt)
+		if (term_.find_first_of("E") != string::npos)
+			term_[term_.find_first_of("E")] = 'H';
 
-	cur_dt.push_back(vector < int >());
+	cur_term.push_back(vector < int >());
 
-	while (cur_pos < dt_term_.size()) {
-		if (dt_term_.find_first_of("(") == cur_pos ||
-			dt_term_.find_first_of(")") == cur_pos ||
-			dt_term_.find_first_of("A") == cur_pos) {
+	while (cur_pos < term_.size()) {
+		if (term_.find_first_of("(") == cur_pos ||
+			term_.find_first_of(")") == cur_pos ||
+			term_.find_first_of("A") == cur_pos) {
 			cur_pos++;
-			if (cur_pos >= dt_term_.size()) {
+			if (cur_pos >= term_.size()) {
 				break;
 			}
 		}
-		if (dt_term_.find_first_of("+") == cur_pos) {
-			cur_dt.push_back(vector < int >());
+		if (term_.find_first_of("+") == cur_pos) {
+			cur_term.push_back(vector < int >());
 			id++;
 			cur_pos++;
 		}
 		for (auto it = vars_o.begin(); it != vars_o.end(); ++it)
 		{
-			if (dt_term_.find_first_of(it->first, cur_pos) == cur_pos) {
-				cur_dt[id].push_back(it->second);
+			if (term_.find_first_of(it->first, cur_pos) == cur_pos) {
+				int sign = 1;
+				if (cur_pos != 0 && term_[cur_pos - 1] == '\\')
+					sign = -1;
+
+				cur_term[id].push_back(it->second * sign);
 				cur_pos += (it->first).size();
 				break;
 			}
 		}
 	}
 
-	return cur_dt;
-}
-
-vector < vector < int > > Solver::equation::dx_term(string dx_term_, map < string, int > vars_o)
-{
-	vector < vector < int > > cur_dx;
-	int cur_pos = 0;
-	int id = 0;
-
-	cur_dx.push_back(vector < int >());
-
-	while (cur_pos < dx_term_.size()) {
-		if (dx_term_.find_first_of("(") == cur_pos ||
-			dx_term_.find_first_of(")") == cur_pos ||
-			dx_term_.find_first_of("A") == cur_pos) {
-			cur_pos++;
-			if (cur_pos >= dx_term_.size()) {
-				break;
-			}
-		}
-		if (dx_term_.find_first_of("+") == cur_pos) {
-			cur_dx.push_back(vector < int >());
-			id++;
-			cur_pos++;
-
-		}
-		for (auto it = vars_o.begin(); it != vars_o.end(); ++it)
-		{
-			if (dx_term_.find_first_of(it->first, cur_pos) == cur_pos) {
-				cur_dx[id].push_back(it->second);
-				cur_pos += (it->first).size();
-				break;
-			}
-		}
-	}
-
-	return cur_dx;
+	return cur_term;
 }
 
 //void Solver::FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s)
