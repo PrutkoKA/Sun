@@ -577,22 +577,13 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 			cusp_s->fill_inverse_mass_matrix();
 
 			vector <double> very_old_coords = cusp_s->grid.GetCoordinates();
-			vector < double > cvn1 = cusp_s->cvn[cusp_s->RHO_A];
-			vector < double > cvn2 = cusp_s->cvn[cusp_s->RHO_U_A];
-			vector < double > cvn3 = cusp_s->cvn[cusp_s->RHO_E_A];
-
-			vector < double > cvnm1 = cusp_s->cvnm1[cusp_s->RHO_A];
-			vector < double > cvnm2 = cusp_s->cvnm1[cusp_s->RHO_U_A];
-			vector < double > cvnm3 = cusp_s->cvnm1[cusp_s->RHO_E_A];
 			vector <vector <vector <double> > > cvss;
 			cvss.push_back(vector <vector <double> >());
-			cvss[0].push_back(cvn1);
-			cvss[0].push_back(cvn2);
-			cvss[0].push_back(cvn2);
+			for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+				cvss[0].push_back(cusp_s->cvn[var]);
 			cvss.push_back(vector <vector <double> >());
-			cvss[1].push_back(cvnm1);
-			cvss[1].push_back(cvnm2);
-			cvss[1].push_back(cvnm2);
+			for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+				cvss[1].push_back(cusp_s->cvnm1[var]);
 
 			cusp_s->grid.SetRow("old_coords", cusp_s->grid.GetValues("coordinate"));
 			cusp_s->cvn_old = cusp_s->cvn;
@@ -606,18 +597,16 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 					vector <double> old_coords = cusp_s->grid.GetCoordinates();
 					// New adaptive grid
 					for (int i = 0; i < 1; ++i) {
-						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
-						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
-						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
 
-						cusp_s->grid.CalculateResolution(1., 1., "rho", "coordinate");
+						cusp_s->grid.CalculateResolution(1., 1., cusp_s->c_var_name[cusp_s->RHO_A], "coordinate");
 						cusp_s->grid.CalculateConcentration(1., "coordinate");
 
 						cusp_s->x = cusp_s->grid.RefineMesh(physDt_, 1e-2);
 
-						cusp_s->cv[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
-						cusp_s->cv[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
-						cusp_s->cv[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->cv[var] = cusp_s->grid.GetValues(cusp_s->c_var_name[var]);
 
 						cusp_s->RefreshBoundaries();						// Refresh boundary conditions
 						cusp_s->RhoUPH();
@@ -631,9 +620,8 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 					for (auto it : cvs)
 					{
 						cusp_s->grid.SetRow("coordinate", old_coords);
-						cusp_s->grid.SetRow("rho", (*it)[cusp_s->RHO_A]);
-						cusp_s->grid.SetRow("rhoU", (*it)[cusp_s->RHO_U_A]);
-						cusp_s->grid.SetRow("rhoE", (*it)[cusp_s->RHO_E_A]);
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->grid.SetRow(cusp_s->c_var_name[var], (*it)[var]);
 
 						vector < string > ignore;
 						vector < vector < double > > new_tab;
@@ -641,15 +629,13 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 						new_tab = cusp_s->grid.NewTable("coordinate", cusp_s->x, ignore, false);
 						cusp_s->grid.SetData(new_tab);
 
-						(*it)[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
-						(*it)[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
-						(*it)[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							(*it)[var] = cusp_s->grid.GetValues(cusp_s->c_var_name[var]);
 					}
 
 					cusp_s->grid.SetRow("coordinate", cusp_s->x);
-					cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
-					cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
-					cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+					for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+						cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
 
 					cusp_s->calculate_mass_matrix();
 					cusp_s->fill_inverse_mass_matrix();
@@ -661,11 +647,6 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 				//break;
 			}
 
-			
-
-			vector < double > cv1 = cusp_s->cv[cusp_s->RHO_A];
-			vector < double > cv2 = cusp_s->cv[cusp_s->RHO_U_A];
-			vector < double > cv3 = cusp_s->cv[cusp_s->RHO_E_A];
 			vector <double> old_coords = cusp_s->grid.GetCoordinates();
 
 			auto remesh = [&](int count, bool use_func, double tau) -> void {
@@ -673,9 +654,8 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 
 					// New adaptive grid
 					for (int i = 0; i < count; ++i) {
-						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
-						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
-						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
 
 						vector< vector <double> > functions;;
 						vector< double > Fs;
@@ -686,19 +666,17 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 							Fs.push_back(1.);
 						}
 
-						cusp_s->grid.CalculateResolution(1., 1., "rho", "coordinate", functions, Fs);
+						cusp_s->grid.CalculateResolution(1., 1., cusp_s->c_var_name[cusp_s->RHO_A], "coordinate", functions, Fs);
 						cusp_s->grid.CalculateConcentration(1., "coordinate");
 
-						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
-						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
-						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
 						cusp_s->grid.SetRow("coordinate", old_coords);
 
 						cusp_s->x = cusp_s->grid.RefineMesh(physDt_, tau);
 
-						cusp_s->cv[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
-						cusp_s->cv[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
-						cusp_s->cv[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->cv[var] = cusp_s->grid.GetValues(cusp_s->c_var_name[var]);
 
 						cusp_s->RefreshBoundaries();						// Refresh boundary conditions
 						cusp_s->RhoUPH();
@@ -715,9 +693,8 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 						for (auto it : cvs)
 						{
 							cusp_s->grid.SetRow("coordinate", very_old_coords);
-							cusp_s->grid.SetRow("rho", /*(*it)[cusp_s->RHO_A])*/cvss[i][0]);
-							cusp_s->grid.SetRow("rhoU", /*(*it)[cusp_s->RHO_U_A])*/cvss[i][1]);
-							cusp_s->grid.SetRow("rhoE", /*(*it)[cusp_s->RHO_E_A])*/cvss[i][2]);
+							for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+								cusp_s->grid.SetRow(cusp_s->c_var_name[var], cvss[i][0]);
 							++i;
 
 							vector < string > ignore;
@@ -726,15 +703,13 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 							new_tab = cusp_s->grid.NewTable("coordinate", cusp_s->x, ignore, false);
 							cusp_s->grid.SetData(new_tab);
 
-							(*it)[cusp_s->RHO_A] = cusp_s->grid.GetValues("rho");
-							(*it)[cusp_s->RHO_U_A] = cusp_s->grid.GetValues("rhoU");
-							(*it)[cusp_s->RHO_E_A] = cusp_s->grid.GetValues("rhoE");
+							for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+								(*it)[var] = cusp_s->grid.GetValues(cusp_s->c_var_name[var]);
 						}
 
 						cusp_s->grid.SetRow("coordinate", cusp_s->x);
-						cusp_s->grid.SetRow("rho", cusp_s->cv[cusp_s->RHO_A]);
-						cusp_s->grid.SetRow("rhoU", cusp_s->cv[cusp_s->RHO_U_A]);
-						cusp_s->grid.SetRow("rhoE", cusp_s->cv[cusp_s->RHO_E_A]);
+						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
+							cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
 
 						// Checking cvn transformation
 						/*cusp_s->cv[cusp_s->RHO_A] = cusp_s->cvn[cusp_s->RHO_A];
@@ -880,22 +855,13 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 
 			// For good remeshing. Interpolation of values from old grig to new one.
 			vector <double> very_old_coords = hllc_s->grid.GetCoordinates();
-			vector < double > rho_a = hllc_s->cvn[hllc_s->RHO_A];
-			vector < double > rho_u_a = hllc_s->cvn[hllc_s->RHO_U_A];
-			vector < double > rho_e_a = hllc_s->cvn[hllc_s->RHO_E_A];
-
-			vector < double > rho_a_m1 = hllc_s->cvnm1[hllc_s->RHO_A];
-			vector < double > rho_u_a_m1 = hllc_s->cvnm1[hllc_s->RHO_U_A];
-			vector < double > rho_e_a_m1 = hllc_s->cvnm1[hllc_s->RHO_E_A];
 			vector <vector <vector <double> > > cvss;
 			cvss.push_back(vector <vector <double> >());
-			cvss[0].push_back(rho_a);
-			cvss[0].push_back(rho_u_a);
-			cvss[0].push_back(rho_e_a);
+			for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+				cvss[0].push_back(hllc_s->cvn[var]);
 			cvss.push_back(vector <vector <double> >());
-			cvss[1].push_back(rho_a_m1);
-			cvss[1].push_back(rho_u_a_m1);
-			cvss[1].push_back(rho_e_a_m1);
+			for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+				cvss[1].push_back(hllc_s->cvnm1[var]);
 
 			hllc_s->grid.SetRow("old_coords", hllc_s->grid.GetValues("coordinate"));
 			hllc_s->cvn_old = hllc_s->cvn;
@@ -906,9 +872,6 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 				drho = hllc_s->Solve(physDt_);
 			}
 
-			vector < double > cv1 = hllc_s->cv[hllc_s->RHO_A];
-			vector < double > cv2 = hllc_s->cv[hllc_s->RHO_U_A];
-			vector < double > cv3 = hllc_s->cv[hllc_s->RHO_E_A];
 			vector <double> old_coords = hllc_s->grid.GetCoordinates();
 
 			auto remesh = [&](int count, bool use_func, double tau) -> void {
@@ -916,9 +879,8 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 
 					// New adaptive grid
 					for (int i = 0; i < count; ++i) {
-						hllc_s->grid.SetRow("rho", hllc_s->cv[hllc_s->RHO_A]);
-						hllc_s->grid.SetRow("rhoU", hllc_s->cv[hllc_s->RHO_U_A]);
-						hllc_s->grid.SetRow("rhoE", hllc_s->cv[hllc_s->RHO_E_A]);
+						for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+							hllc_s->grid.SetRow(hllc_s->c_var_name[var], hllc_s->cv[var]);
 
 						vector< vector <double> > functions;;
 						vector< double > Fs;
@@ -929,19 +891,17 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 							Fs.push_back(1.);
 						}
 
-						hllc_s->grid.CalculateResolution(1., 1., "rho", "coordinate", functions, Fs);
+						hllc_s->grid.CalculateResolution(1., 1., hllc_s->c_var_name[hllc_s->RHO_A], "coordinate", functions, Fs);
 						hllc_s->grid.CalculateConcentration(1., "coordinate");
 
-						hllc_s->grid.SetRow("rho", hllc_s->cv[hllc_s->RHO_A]);
-						hllc_s->grid.SetRow("rhoU", hllc_s->cv[hllc_s->RHO_U_A]);
-						hllc_s->grid.SetRow("rhoE", hllc_s->cv[hllc_s->RHO_E_A]);
+						for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+							hllc_s->grid.SetRow(hllc_s->c_var_name[var], hllc_s->cv[var]);
 						hllc_s->grid.SetRow("coordinate", old_coords);
 
 						hllc_s->x = hllc_s->grid.RefineMesh(physDt_, tau);
 
-						hllc_s->cv[hllc_s->RHO_A] = hllc_s->grid.GetValues("rho");
-						hllc_s->cv[hllc_s->RHO_U_A] = hllc_s->grid.GetValues("rhoU");
-						hllc_s->cv[hllc_s->RHO_E_A] = hllc_s->grid.GetValues("rhoE");
+						for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+							hllc_s->cv[var] = hllc_s->grid.GetValues(hllc_s->c_var_name[var]);
 
 						hllc_s->RefreshBoundaries();						// Refresh boundary conditions
 						hllc_s->RhoUPH();
@@ -958,9 +918,8 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 						for (auto it : cvs)
 						{
 							hllc_s->grid.SetRow("coordinate", very_old_coords);
-							hllc_s->grid.SetRow("rho", cvss[i][0]);
-							hllc_s->grid.SetRow("rhoU", cvss[i][1]);
-							hllc_s->grid.SetRow("rhoE", cvss[i][2]);
+							for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+								hllc_s->grid.SetRow(hllc_s->c_var_name[var], cvss[i][0]);
 							++i;
 
 							vector < string > ignore;
@@ -969,15 +928,13 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 							new_tab = hllc_s->grid.NewTable("coordinate", hllc_s->x, ignore, false);
 							hllc_s->grid.SetData(new_tab);
 
-							(*it)[hllc_s->RHO_A] = hllc_s->grid.GetValues("rho");
-							(*it)[hllc_s->RHO_U_A] = hllc_s->grid.GetValues("rhoU");
-							(*it)[hllc_s->RHO_E_A] = hllc_s->grid.GetValues("rhoE");
+							for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+								(*it)[var] = hllc_s->grid.GetValues(hllc_s->c_var_name[var]);
 						}
 
 						hllc_s->grid.SetRow("coordinate", hllc_s->x);
-						hllc_s->grid.SetRow("rho", hllc_s->cv[hllc_s->RHO_A]);
-						hllc_s->grid.SetRow("rhoU", hllc_s->cv[hllc_s->RHO_U_A]);
-						hllc_s->grid.SetRow("rhoE", hllc_s->cv[hllc_s->RHO_E_A]);
+						for (int var = 0; var < hllc_s->CONS_VAR_COUNT; ++var)
+							hllc_s->grid.SetRow(hllc_s->c_var_name[var], hllc_s->cv[var]);
 
 						hllc_s->calculate_mass_matrix();
 						hllc_s->fill_inverse_mass_matrix();

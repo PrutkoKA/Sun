@@ -78,25 +78,44 @@ Solver::Solver(sol_struct& sol_init_) :
 
 	RK_stages_num = RK_stage_coeffs.size();
 
-	SetEquation("mass", "RhoA", "RhoUA", vars, vars_o);
-	SetEquation("impulse", "RhoUA", "(RhoUU+p)A", vars, vars_o);
-	SetEquation("energy", "RhoEA", "RhoHUA", vars, vars_o);
+	SetEquation("mass", c_var_name[RHO_A], var_name[RHO] + var_name[U] + "A", vars, vars_o);
+	SetEquation("impulse", c_var_name[RHO_U_A], "(" + var_name[RHO] + var_name[U] + var_name[U] + op_name[operation::plus] + var_name[P] + ")A", vars, vars_o);
+	SetEquation("energy", c_var_name[RHO_E_A], var_name[RHO] + var_name[H] + var_name[U] + "A", vars, vars_o);
 
 	set_fv_equation(
-		"Rho", 
-		{ "RhoA", "\\A", ""}		// There is dummy for unambiguous conservation
+		var_name[RHO],
+			{	c_var_name[RHO_A], 
+				op_name[operation::div] + 
+				"A", ""}		// There is dummy for unambiguous conservation
 	);
 	set_fv_equation(
-		"U", 
-		{ "RhoUA", "\\RhoA", ""}
+		var_name[U],
+		{		c_var_name[RHO_U_A], 
+				op_name[operation::div] + 
+				c_var_name[RHO_A], ""}
 	);
 	set_fv_equation(
-		"p", 
-		{ "RhoEA", "\\RhoA", "-0.5U^2", "*GAMMAM", "*RHO" }
+		var_name[P],
+		{		c_var_name[RHO_E_A], 
+				op_name[operation::div] + 
+				c_var_name[RHO_A], 
+				op_name[operation::minus] + 
+				"0.5" + var_name[U] + "^2", 
+				op_name[operation::mult] + 
+				"GAMMAM", 
+				op_name[operation::mult] + 
+				var_name[RHO], ""}
 	);
 	set_fv_equation(
-		"H", 
-		{ "GAMMA", "\\GAMMAM", "*P", "\\RHO", "+0.5U^2" }
+		var_name[H],
+		{		"GAMMA", 
+				op_name[operation::div] + 
+				"GAMMAM", 
+				op_name[operation::mult] + 
+				var_name[P], 
+				op_name[operation::div] + 
+				var_name[RHO], op_name[operation::plus] +
+				"0.5" + var_name[U] + "^2" }
 	);
 }
 
@@ -921,41 +940,6 @@ double Solver::SolveExplImpl(double physDt)
 		return 0.;
 	}
 
-	if (false) {
-
-		double rho_[2] = { 1, 0.125 };
-		double u_[2] = { 0.75, 0 };
-		double mass_[2];
-		double p_[2] = { 1., 0.1 };
-		double e_[2];
-
-		for (int i = 0; i < 2; ++i) {
-			e_[i] = p_[i] / (gamma - 1.) / rho_[i] + 0.5 * u_[i] * u_[i];
-			mass_[i] = rho_[0] * u_[i];
-		}
-
-		// cusp_s->InverseGrid();
-		InitFlowAG2(rho_, mass_, e_, p_, 0.3);
-
-		grid.SetRow("rho", cv[RHO_A]);
-		grid.SetRow("rhoU", cv[RHO_U_A]);
-		grid.SetRow("rhoE", cv[RHO_E_A]);
-
-		grid.CalculateResolution(1., 1., "rho", "coordinate");
-		grid.CalculateConcentration(1., "coordinate");
-
-		x = grid.RefineMesh();
-
-		cv[RHO_A] = grid.GetValues("rho");
-		cv[RHO_U_A] = grid.GetValues("rhoU");
-		cv[RHO_E_A] = grid.GetValues("rhoE");
-
-		//InitFlowAG2(rho_, mass_, e_, p_, 0.3);
-
-		RefreshBoundaries();						// Refresh boundary conditions
-		RhoUPH();
-	}
-
 	double tau = 1e-2;
 	if (remesh && true) {
 		vector <double> old_coords = grid.GetCoordinates();
@@ -969,9 +953,8 @@ double Solver::SolveExplImpl(double physDt)
 		vector < double > fv_U_new = fv[U];
 		vector < double > fv_H_new = fv[H];
 		for (int i = 0; i < 1; ++i) {
-			grid.SetRow("rho", cv[RHO_A]);
-			grid.SetRow("rhoU", cv[RHO_U_A]);
-			grid.SetRow("rhoE", cv[RHO_E_A]);
+			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+				grid.SetRow(c_var_name[var], cv[var]);
 			//grid.SetRow("coordinate", old_coords);
 
 			vector< vector <double> > functions;;
@@ -985,21 +968,21 @@ double Solver::SolveExplImpl(double physDt)
 				/*Fs.push_back(1.);
 				Fs.push_back(1.);*/
 			}
-			grid.CalculateResolution(1., 1e0, "rho", "coordinate", functions, Fs);
+			grid.CalculateResolution(1., 1e0, c_var_name[RHO_A], "coordinate", functions, Fs);
 			grid.CalculateConcentration(1., "coordinate");
 
 			/*grid.SetRow("rho", cv1);
 			grid.SetRow("rhoU", cv2);
 			grid.SetRow("rhoE", cv3);*/
-			if (grid.ColumnExists("U"))
+			if (grid.ColumnExists(var_name[U]))
 			{
-				grid.SetRow("U", fv_U);
-				grid.SetRow("H", fv_H);
+				grid.SetRow(var_name[U], fv_U);
+				grid.SetRow(var_name[H], fv_H);
 			}
 			else
 			{
-				grid.AddColumn("U", fv_U);
-				grid.AddColumn("H", fv_H);
+				grid.AddColumn(var_name[U], fv_U);
+				grid.AddColumn(var_name[H], fv_H);
 			}
 			//grid.SetRow("coordinate", old_coords);
 
@@ -1007,12 +990,11 @@ double Solver::SolveExplImpl(double physDt)
 			ignore.push_back("old_coords");
 			x = grid.RefineMesh(dt[0], tau, 1., ignore);
 
-			cv[RHO_A] = grid.GetValues("rho");
-			cv[RHO_U_A] = grid.GetValues("rhoU");
-			cv[RHO_E_A] = grid.GetValues("rhoE");
+			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+				cv[var] = grid.GetValues(c_var_name[var]);
 
-			fv_U_new = grid.GetValues("U");
-			fv_H_new = grid.GetValues("H");
+			fv_U_new = grid.GetValues(var_name[U]);
+			fv_H_new = grid.GetValues(var_name[H]);
 
 			RefreshBoundaries();						// Refresh boundary conditions
 			RhoUPH();
@@ -1032,9 +1014,8 @@ double Solver::SolveExplImpl(double physDt)
 		for (auto it : cvs)
 		{
 			grid.SetRow("coordinate", old_coords_v[i]);
-			grid.SetRow("rho", /*(*it)[RHO_A])*/cvs_old[i][RHO_A]);
-			grid.SetRow("rhoU", /*(*it)[RHO_U_A])*/cvs_old[i][RHO_U_A]);
-			grid.SetRow("rhoE", /*(*it)[RHO_E_A])*/cvs_old[i][RHO_E_A]);
+			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+				grid.SetRow(c_var_name[var], cvs_old[i][var]);
 			++i;
 
 			vector < string > ignore;
@@ -1044,15 +1025,13 @@ double Solver::SolveExplImpl(double physDt)
 			new_tab = grid.NewTable("coordinate", x, ignore, false);
 			grid.SetData(new_tab);
 
-			(*it)[RHO_A] = grid.GetValues("rho");
-			(*it)[RHO_U_A] = grid.GetValues("rhoU");
-			(*it)[RHO_E_A] = grid.GetValues("rhoE");
+			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+				(*it)[var] = grid.GetValues(c_var_name[var]);
 		}
 
 		grid.SetRow("coordinate", x);
-		grid.SetRow("rho", cv[RHO_A]);
-		grid.SetRow("rhoU", cv[RHO_U_A]);
-		grid.SetRow("rhoE", cv[RHO_E_A]);
+		for (int var = 0; var < CONS_VAR_COUNT; ++var)
+			grid.SetRow(c_var_name[var], cv[var]);
 
 		calculate_mass_matrix();
 		fill_inverse_mass_matrix();
@@ -2254,6 +2233,7 @@ void Solver::TimeSteps(bool local_time, double dt_)		// Blazek, Section 6.1.4, p
 {
 	double rho;
 	double u;
+	double p;
 	double cs;
 	double dx;
 	double sprad;
@@ -2268,9 +2248,10 @@ void Solver::TimeSteps(bool local_time, double dt_)		// Blazek, Section 6.1.4, p
 	}
 	for (int i = 1; i < ib2; ++i)
 	{
-		rho = cv[RHO_A][i] / a[i];
-		u = cv[RHO_U_A][i] / cv[RHO_A][i];
-		cs = sqrt(gamma * p[i] / rho);
+		rho = make_fv_equation(var_name[RHO], i);
+		u = make_fv_equation(var_name[U], i);
+		p = make_fv_equation(var_name[P], i);
+		cs = sqrt(gamma * p / rho);
 		dx = 0.5 * (x[i + 1] - x[i - 1]);
 		sprad = cs * sqrt(dx * dx + pow(a[i], 2)) + abs(u) * a[i];
 		dt[i] = vol[i] / sprad;

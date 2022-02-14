@@ -70,14 +70,15 @@ public:
 	//map < string, int > vars { {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
 	//map < string, int > vars_o { {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3} };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3}/*, {"n", 4}*/};
+	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3}/*, {"C2", 5}*//*, {"n", 4}*/};
 	enum Vars_o {
 		RHO,
 		U,
 		P,
 		H,
-		FIELD_VAR_COUNT/*,
-		n*/
+		FIELD_VAR_COUNT
+		//, C2,		// extra variables
+		//n*/
 	};
 
 	map<int, string> var_name = {
@@ -95,9 +96,9 @@ public:
 	};
 
 	map<int, string> c_var_name = { 
-		{RHO_A, "rho"},
-		{RHO_U_A, "rhoU"},
-		{RHO_E_A, "rhoE"}
+		{RHO_A, "RhoA"},
+		{RHO_U_A, "RhoUA"},
+		{RHO_E_A, "RhoEA"}
 };
 
 	double omega = 1.;
@@ -152,6 +153,8 @@ public:
 		mult,
 		div
 	};
+	map<operation, string> op_name = { {operation::plus, "+"}, {operation::minus, "-"}, {operation::mult, "*"}, {operation::div, "\\"} };
+	map<string, operation> name_to_op = { {"+", operation::plus}, {"-", operation::minus}, {"*", operation::mult}, {"\\", operation::div} };
 	struct eq_term
 	{
 		operation op;
