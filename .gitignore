@@ -1428,3 +1428,9 @@ x64/
 log
 
 *.exe
+
+unsupported_old/
+
+unsupported/
+
+Eigen_old/

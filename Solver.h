@@ -70,11 +70,12 @@ public:
 	//map < string, int > vars { {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
 	//map < string, int > vars_o { {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3} };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3}/*, {"C2", 5}*//*, {"n", 4}*/};
+	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}/*, {"C2", 5}*//*, {"n", 4}*/};
 	enum Vars_o {
 		RHO,
 		U,
 		P,
+		E,
 		H,
 		FIELD_VAR_COUNT
 		//, C2,		// extra variables
@@ -85,6 +86,7 @@ public:
 		{RHO, "Rho"},
 		{U, "U"},
 		{P, "p"},
+		{E, "E"},
 		{H, "H"}
 	};
 
@@ -153,8 +155,8 @@ public:
 		mult,
 		div
 	};
-	map<operation, string> op_name = { {operation::plus, "+"}, {operation::minus, "-"}, {operation::mult, "*"}, {operation::div, "\\"} };
-	map<string, operation> name_to_op = { {"+", operation::plus}, {"-", operation::minus}, {"*", operation::mult}, {"\\", operation::div} };
+	map<operation, string> op_name = { {operation::plus, "+"}, {operation::minus, "-"}, {operation::mult, "*"}, {operation::div, "/"} };
+	map<string, operation> name_to_op = { {"+", operation::plus}, {"-", operation::minus}, {"*", operation::mult}, {"/", operation::div} };
 	struct eq_term
 	{
 		operation op;
@@ -267,7 +269,6 @@ public:
 	void CalculateUnsteadyRHS(double physDt_);
 
 	double Solve(double physDt = 0.);
-	//double SolveExplicit(double physDt = 0.);
 
 	void UpdateP(int i);
 
@@ -295,7 +296,6 @@ public:
 	void GMRES(DiagonalFunc D_Func, LUFunc L_Func, LUFunc U_Func, int rks, vector < vector < vector < double > > >& rhsstage, vector < vector < vector < double > > >& cvstage, double physDt_ = 1.);
 	SparseMatrix< double > ILU_0(SparseMatrix< double >& SM);
 
-	//void LUSGS(int rks, MatrixXd& Li, MatrixXd& Ui, MatrixXd& Di, vector < vector < vector < double > > >& rhsstage, vector < vector < double > >& cvstage);
 	double SolveExplImpl(double physDt = 0.);
 	double ForwardEuler(double physDt);
 	MatrixXd ToEigen(vector < vector < double > >& M);
@@ -333,8 +333,6 @@ public:
 	void HideOutput();
 
 	void InitFirsStages(vector < vector < vector < double > > >& cvstage, vector < vector < vector < double > > >& rhsstage);
-
-	vector < vector < double > > MakeCV(vector < vector < double > >& fv_);
 
 	double CalcH(double p_, double Rho_, double U_);
 

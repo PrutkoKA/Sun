@@ -78,24 +78,31 @@ Solver::Solver(sol_struct& sol_init_) :
 
 	RK_stages_num = RK_stage_coeffs.size();
 
-	SetEquation("mass", c_var_name[RHO_A], var_name[RHO] + var_name[U] + "A", vars, vars_o);
-	SetEquation("impulse", c_var_name[RHO_U_A], "(" + var_name[RHO] + var_name[U] + var_name[U] + op_name[operation::plus] + var_name[P] + ")A", vars, vars_o);
-	SetEquation("energy", c_var_name[RHO_E_A], var_name[RHO] + var_name[H] + var_name[U] + "A", vars, vars_o);
+	SetEquation("mass", c_var_name[RHO_A], var_name[RHO] + var_name[U] + "A", vars, vars_o);	// RhoA, RhoUA
+	SetEquation("impulse", c_var_name[RHO_U_A], "(" + var_name[RHO] + var_name[U] + var_name[U] + op_name[operation::plus] + var_name[P] + ")A", vars, vars_o);		// RhoUA, (RhoUU+p)A
+	//SetEquation("energy", c_var_name[RHO_E_A], "(" + var_name[RHO] + var_name[H] + var_name[U] /*+ op_name[operation::plus] + var_name[P] + var_name[U]*/ + ")A", vars, vars_o);		// RhoEA, RhoHUA
+	SetEquation("energy", c_var_name[RHO_E_A], "(" + var_name[RHO] + var_name[E] + var_name[U] + op_name[operation::plus] + var_name[P] + var_name[U] + ")A", vars, vars_o);		// RhoEA, RhoHUA
 
-	set_fv_equation(
+	set_fv_equation(		// Rho = RhoA / A
 		var_name[RHO],
 			{	c_var_name[RHO_A], 
 				op_name[operation::div] + 
 				"A", ""}		// There is dummy for unambiguous conservation
 	);
-	set_fv_equation(
+	set_fv_equation(		// E = RhoEA / RhoA
+		var_name[E],
+		{ c_var_name[RHO_E_A],
+			op_name[operation::div] +
+			c_var_name[RHO_E_A], "" }		// There is dummy for unambiguous conservation
+	);
+	set_fv_equation(		// U = RhoUA / RhoA
 		var_name[U],
 		{		c_var_name[RHO_U_A], 
 				op_name[operation::div] + 
 				c_var_name[RHO_A], ""}
 	);
 	set_fv_equation(
-		var_name[P],
+		var_name[P],		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
 		{		c_var_name[RHO_E_A], 
 				op_name[operation::div] + 
 				c_var_name[RHO_A], 
@@ -106,7 +113,7 @@ Solver::Solver(sol_struct& sol_init_) :
 				op_name[operation::mult] + 
 				var_name[RHO], ""}
 	);
-	set_fv_equation(
+	set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
 		var_name[H],
 		{		"GAMMA", 
 				op_name[operation::div] + 
@@ -794,80 +801,6 @@ void Solver::StagesMemoryAlloc_Init(vector < vector < vector < double > > >& rhs
 	}
 }
 
-//double Solver::SolveExplicit(double physDt)
-//{
-//	double fac, adtv, rrho, rhou, rhoe;
-//	vector < int > diss_flag_;
-//	vector < double > diss_blend_;
-//	vector < vector < vector < double > > > cvstage;
-//	vector < vector < vector < double > > > rhsstage;
-//	vector < vector < double > > rhsold;
-//	bool SkipJacComputation;
-//
-//	iter++;
-//
-//	if (solver_name == "cds") {
-//		diss_flag_ = GetDissFlag();
-//		diss_blend_ = GetDissBlend();
-//	}
-//	for (int i = 0; i < eq_num && solver_name == "cds"; ++i) {
-//		diss[i].assign(diss[i].size(), 0.);
-//	}
-//
-//	// Calculate time step
-//	{if (!steadiness && time_stepping == 1)
-//		if (Global_Time == 0.) {
-//			TimeSteps(false);
-//			physDt = dt[0];
-//		}
-//		else {
-//			TimeSteps(false, physDt);
-//		}
-//	else
-//		TimeSteps(lts); }		// local = false!
-//
-//	StagesMemoryAlloc_Init(rhsstage, cvstage);
-//	RhoUPH();
-//
-//	SkipJacComputation = false;
-//	// loop over the R. - K. stages:	Blazek, Section 6.1.2, p. 170, "Hybrid multistage schemes"
-//	for (int rks = 0; rks < RK_stages_num; ++rks)
-//	{
-//		if (solver_name == "cds" && diss_flag_[rks] == 1) {	// artificial dissipation
-//			Dissipation(diss_blend_[rks]);
-//		} else {
-//			LRState("");
-//		}
-//		if (time_expl == false && rks == 1)
-//		{
-//			SkipJacComputation = true;
-//		}
-//
-//		ComputeRHSandJacobian();					// convective flux residual
-//		RHSProcessing(rhsstage, rks, physDt, rhsold);		// RHS preparations, unsteady modification if needed
-//		CVProcessing(rhsstage, cvstage, rks);		// update (conservative variables and pressure)
-//	}
-//
-//	// If unsteady and two step RK
-//	if (!steadiness && time_stepping == 1) {
-//		FinalTSRK_CV_Calculation(rhsstage, cvstage);
-//		Global_Time += physDt * cfl;
-//		return 0.;
-//	}
-//
-//	//FILE* file;
-//	//file = fopen("Output/time_dep.txt", "a");
-//	//for (int i = 1; i < ib2; ++i)
-//	//{
-//	//	fprintf(file, "%lf\t", cv[RHO_U_A][i]);
-//	//	// fprintf(file, "%lf\t", p[i]);
-//	//}
-//	//fprintf(file, "\n");
-//	//fclose(file);
-//
-//	return Convergence();
-//}
-
 double Solver::SolveExplImpl(double physDt)
 {
 	double fac, adtv, rrho, rhou, rhoe;
@@ -944,9 +877,6 @@ double Solver::SolveExplImpl(double physDt)
 	if (remesh && true) {
 		vector <double> old_coords = grid.GetCoordinates();
 		// New adaptive grid
-		/*vector < double > cv1 = cv[RHO_A];
-		vector < double > cv2 = cv[RHO_U_A];
-		vector < double > cv3 = cv[RHO_E_A];*/
 		RhoUPH();
 		vector < double > fv_U = fv[U];
 		vector < double > fv_H = fv[H];
@@ -955,7 +885,6 @@ double Solver::SolveExplImpl(double physDt)
 		for (int i = 0; i < 1; ++i) {
 			for (int var = 0; var < CONS_VAR_COUNT; ++var)
 				grid.SetRow(c_var_name[var], cv[var]);
-			//grid.SetRow("coordinate", old_coords);
 
 			vector< vector <double> > functions;;
 			vector< double > Fs;
@@ -1036,103 +965,6 @@ double Solver::SolveExplImpl(double physDt)
 		calculate_mass_matrix();
 		fill_inverse_mass_matrix();
 	}
-	/*
-	//if (true)
-	//{		// New piece of work
-	//	vector < double > Res, Conc;
-
-	//	grid.SetRow("rho", cv[RHO_A]);
-	//	grid.SetRow("rhoU", cv[RHO_U_A]);
-	//	grid.SetRow("rhoE", cv[RHO_E_A]);
-
-	//	Res = grid.GetResolution();
-
-	//	vector < double > rem_cvN_A = cv[N_A];
-	//	double coef = 0.5;
-	//	coef = min(max(0., coef), 1.);
-	//	double side_coef = (1. - coef) / 1.;
-
-	//	for (int j = 1; j < ib2 - 1; ++j)
-	//	{
-	//		if (j > 1 && j < ib2 - 2) {
-	//			cv[N_A][j] = (rem_cvN_A[j - 1] / (x[j] - x[j - 1]) + rem_cvN_A[j + 1] / (x[j + 1] - x[j])) / (1. / (x[j] - x[j - 1]) + 1. / (x[j + 1] - x[j])) * side_coef + rem_cvN_A[j] * coef;
-	//		}
-	//		if (j == 1) {
-	//			cv[N_A][j] = (rem_cvN_A[j + 1] / (x[j + 1] - x[j])) / ( 1. / (x[j + 1] - x[j])) * side_coef * 1. + rem_cvN_A[j] * coef;
-	//		}
-	//		if (j == ib2 - 2) {
-	//			cv[N_A][j] = (rem_cvN_A[j - 1] / (x[j] - x[j - 1])) / (1. / (x[j] - x[j - 1])) * side_coef * 1. + rem_cvN_A[j] * coef;
-	//		}
-	//		//cv[N_A][j] = (pow(rem_cvN_A[j - 1], 1) + pow(rem_cvN_A[j + 1], 1)) * side_coef + rem_cvN_A[j] * coef;
-	//	}
-	//	cv[N_A][0] = cv[N_A][0];
-	//	cv[N_A][ib2 - 1] = cv[N_A][ib2 - 1];
-
-	//	vector < double > new_x = grid.GetValues("coordinate");
-	//	for (int i = 1; i < ib2; ++i) {
-	//		double max_dx, dx;
-
-	//		if (i > 1 || i < ib2 - 1) {
-	//			max_dx = min(x[i] - x[i - 1], x[i + 1] - x[i]);
-	//		}
-	//		else {
-	//			if (i == 1) {
-	//				max_dx = x[i + 1] - x[i];
-	//			}
-	//			else {
-	//				max_dx = x[i] - x[i - 1];
-	//			}
-	//		}
-
-	//		dx = 0.5 * (x[i] - x[i - 1]) * ((cv[N_A][i] - cvold[N_A][i]) - (cv[N_A][i - 1] - cvold[N_A][i - 1])) / cv[N_A][i] *Sign(pow(Res[i] - Res[i - 1], 1)) * 1.;
-	//		dx += 0.5 * (x[i + 1] - x[i]) * ((cv[N_A][i] - cvold[N_A][i]) - (cv[N_A][i + 1] - cvold[N_A][i + 1])) / cv[N_A][i]  *Sign(pow(Res[i + 1] - Res[i], 1))* 1.;
-	//		//dx = 0.5 * (x[i] - x[i - 1]) * ((cv[N_A][i] - cvold[N_A][i]) - 0. * (cv[N_A][i - 1] - cvold[N_A][i - 1])) / cv[N_A][i] * Res[i];
-	//		dx = min(abs(dx), max_dx / grid.GetAlpha()) * Sign(dx);
-	//		new_x[i] += dx;
-	//		//new_x[i] -= 0.5 * (x[i] - x[i - 1]) * (cv[N_A][i] - cvold[N_A][i]) / cv[N_A][i] * Res[i];
-	//	}
-	//	vector < string > ignore;
-	//	vector < vector < double > > new_tab;
-
-	//	ignore.push_back(grid.TYPE_COL);
-	//	new_tab = grid.NewTable("coordinate", new_x, ignore, false);
-
-	//	grid.SetData(new_tab);
-	//	// Restruction of grid;
-	//	//grid.FindMesh(0.1, "coordinate");
-	//	cv[RHO_A] = grid.GetValues("rho");
-	//	cv[RHO_U_A] = grid.GetValues("rhoU");
-	//	cv[RHO_E_A] = grid.GetValues("rhoE");
-
-	//	grid.CalculateResolution(1., 1., "rho", "coordinate");
-	//	grid.CalculateConcentration(1., "coordinate");
-	//	Res = grid.GetResolution();
-	//	Conc = grid.GetConcentration();
-
-
-	//	double alpha_ = grid.GetAlpha();
-	//	for (int i = 1; i < ib2; ++i)
-	//	{
-	//		cv[N_A][i] = (Conc[i]) * a[i]; // -alpha_ * (alpha_ + 1.) * (Conc[i + 1] - 2. * Conc[i] + Conc[i - 1])) / Res[i];
-	//	}
-	//	cv[N_A][0] = cv[N_A][1];
-	//	cv[N_A][imax - 1] = cv[N_A][ib2 - 1];
-	//	x = new_x;
-
-	//	RefreshBoundaries();						// Refresh boundary conditions
-	//	RhoUPH();
-	//}
-
-	//FILE* file;
-
-	//file = fopen("Output/time_dep.txt", "a");
-	//for (int i = 1; i < ib2; ++i)
-	//{
-	//	fprintf(file, "%lf\t", cv[RHO_U_A][i]);
-	//	// fprintf(file, "%lf\t", p[i]);
-	//}
-	//fprintf(file, "\n");
-	//fclose(file);*/
 
 	return Convergence();
 }
@@ -1365,397 +1197,6 @@ void Solver::FinalImplicitRHS_CV_Calculation(vector < vector < vector < double >
 	RefreshBoundaries();
 	RhoUPH();
 }
-
-//void Solver::LUSGS(int rks, MatrixXd& Li, MatrixXd& Ui, MatrixXd& Di, vector < vector < vector < double > > >& rhsstage, vector < vector < double > >& cvstage)
-//{
-//	double dsi;
-//	double adtv;
-//
-//	vector < MatrixXd > invD(imax, MatrixXd(eq_num, eq_num));
-//	vector < VectorXd > DdWijk(imax, VectorXd(eq_num));
-//	VectorXd DdWijkn(eq_num);
-//	vector < VectorXd > Wijk(imax, VectorXd(eq_num));
-//	VectorXd LdW1(eq_num);
-//	VectorXd UdWn(eq_num);
-//	VectorXd dW(eq_num);
-//	VectorXd Wi(eq_num);
-//
-//	vector < double > jac(eq_num * eq_num);
-//	vector < double > flux(eq_num);
-//
-//	vector < vector < double > >	ls(var_num, vector < double >(imax, 0.)),
-//									rs(var_num, vector < double >(imax, 0.));
-//	vector < vector < double > >	ls_(var_num, vector < double >(imax, 0.)),
-//									rs_(var_num, vector < double >(imax, 0.));
-//	vector < vector < double > >	cvl(eq_num, vector < double >(imax, 0.)),
-//									cvr(eq_num, vector < double >(imax, 0.));
-//	vector < vector < double > >	cvl_(eq_num, vector < double >(imax, 0.)),
-//									cvr_(eq_num, vector < double >(imax, 0.));
-//	vector < vector < double > >	cvold_(eq_num, vector < double >(imax, 0.));
-//
-//	for (int eq = 0; eq < eq_num; ++eq)
-//	{
-//		for (int i = 0; i < imax; ++i)
-//		{
-//			cvold_[eq][i] = cvold[eq][i] / a[i];
-//		}
-//	}
-//	cvstage = cvold_;
-//
-//	Wijk[0](0) = cvold_[0][0];
-//	Wijk[0](1) = cvold_[1][0];
-//	Wijk[0](2) = cvold_[2][0];
-//
-//	//LRState(cvold, ls, rs);
-//	//cvl = MakeCV(ls);
-//	//cvr = MakeCV(rs);
-//
-//	// implicit residual smoothing
-//	/*if (res_smooth_flag[rks] > 0 && eps_impl_res_smooth > 0.)
-//		ImplResidualSmooth();*/
-//
-//		// First sweep
-//	for (int i = 1; i < ib2; ++i)
-//	{
-//		//LRState(cvstage, ls_, rs_);
-//		//cvl_ = MakeCV(ls_);
-//		//cvr = MakeCV(rs);
-//
-//		dsi = 0.5 * (a[i] + a[i + 1]);
-//
-//		adtv = ck[rks] * cfl * dt[i];
-//		//Li.hasNaN()
-//		Li.setZero(eq_num, eq_num);
-//		Ui.setZero(eq_num, eq_num);
-//		Li += 0.5*(L_SGS[i] + L_SGS[i].cwiseAbs()) * dsi;
-//		Ui += 0.5*(U_SGS[i] - U_SGS[i].cwiseAbs()) * dsi;
-//		dsi = -0.5 * (a[i] + a[i - 1]);
-//		Li += 0.5*(L_SGS[i - 1] + L_SGS[i].cwiseAbs()) * dsi;
-//		Ui += 0.5*(U_SGS[i - 1] - U_SGS[i - 1].cwiseAbs()) * dsi;
-//		Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//
-//		Li = 0.5 * ( (L_SGS[i] - L_SGS[i - 1]) * 0.5 * (a[i] + a[i + 1]) + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		Ui = 0.5 * (-(U_SGS[i] - U_SGS[i - 1]) * 0.5 * (a[i] + a[i - 1]) - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//
-//		/*GetFluxAndJacobian(i, flux, cvold_, jac, true, true);
-//		Li = GetJacobian(jac);
-//		Ui = Li;
-//		dsi = 0.5 * (a[i] + a[i + 1]);
-//		Li = 0.5 * (Li + Li.cwiseAbs()) * dsi;
-//		Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		dsi = -0.5 * (a[i] + a[i - 1]);
-//		Ui = 0.5 * (Ui - Ui.cwiseAbs()) * dsi;
-//		Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);*/
-//
-//		//GetFluxAndJacobian(i, flux, cvl, jac, true);
-//		//GetFluxAndJacobian(i, flux, cvold_, jac, true);
-//		//Li = GetJacobian(jac);
-//		//Li = (Li + Li.cwiseAbs()) / 2.;
-//		Li *= /*dsi **/ ak[rks][rks];
-//		//ToMatrix(Li);
-//
-//		/*GetFluxAndJacobian(i, flux, cvr, jac, false);
-//		Ui = GetJacobian(jac);
-//		Ui = (Ui - Ui.cwiseAbs()) / 2.;
-//		Ui *= dsi * ak[rks][rks];
-//		ToMatrix(Ui);*/
-//
-//		dsi = -0.5 * (a[i - 1] + a[i]);		//  ** MINUS ?? **
-//
-//		/*GetFluxAndJacobian(i - 1, flux, cvl, jac, true);
-//		Li += dsi * ak[rks][rks] * ((GetJacobian(jac) + GetJacobian(jac).cwiseAbs()) / 2.);*/
-//
-//		//Ui = U_SGS[i];
-//		//GetFluxAndJacobian(i, flux, cvold_, jac, false);
-//		//Ui = GetJacobian(jac);
-//		//Ui *= dsi * ak[rks][rks];
-//
-//		/*GetFluxAndJacobian(i - 1, flux, cvr, jac, false);
-//		Ui += dsi * ak[rks][rks] * ((GetJacobian(jac) - GetJacobian(jac).cwiseAbs()) / 2.);*/
-//
-//		//GetFluxAndJacobian(i, flux, cvold_, jac, false);
-//		//Ui = GetJacobian(jac);
-//		//Ui = (Ui - Ui.cwiseAbs()) / 2.;
-//		Ui *= /*dsi **/ ak[rks][rks];
-//		//ToMatrix(Ui);
-//
-//		Di = D_SGS[i];
-//		Di = MakeD(Li, Ui, Di, adtv, i, rks);
-//
-//		invD[i] = Di.inverse();
-//		//ToMatrix(invD[i]);
-//		//ToMatrix(Di * invD[i]);
-//
-//		//dW = Wijk[i - 1] - GetEigenVector(cvold, i - 1);
-//		//dW = (GetEigenVector(cvl_, i - 1) - GetEigenVector(cvl, i - 1));
-//
-//		Li.setZero(eq_num, eq_num);
-//		if (i > 0) {
-//			dsi = 0.5 * (a[i - 1] + a[i]);
-//			Li += 0.5*(L_SGS[i - 1] + L_SGS[i - 1].cwiseAbs()) * dsi;
-//		}
-//
-//		if (i > 1) {
-//			dsi = -0.5 * (a[i - 2] + a[i - 1]);
-//			Li += 0.5*(L_SGS[i - 2] + L_SGS[i - 2].cwiseAbs()) * dsi;
-//			Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);
-//		}
-//		/*Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);*/
-//		//GetFluxAndJacobian(i - 1, flux, cvold_, jac, true);
-//
-//		//GetFluxAndJacobian(i - 1, flux, cvold_, jac, true, true);
-//		Li = GetJacobian(jac);
-//		dsi = 0.5 * (a[i] + a[i - 1]);
-//		Li = 0.5 * (Li + Li.cwiseAbs()) * dsi;
-//		Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);
-//
-//		Li.setZero(eq_num, eq_num);
-//		if (i > 1)
-//			Li = 0.5 * ((L_SGS[i - 1] - L_SGS[i - 2]) * 0.5 * (a[i] + a[i - 1]) + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);
-//		
-//		//GetFluxAndJacobian(i - 1, flux, cvl, jac, true);
-//		//GetFluxAndJacobian(i - 1, flux, cvold_, jac, true);
-//		//Li = GetJacobian(jac);
-//		//Li = (Li + Li.cwiseAbs()) / 2.;
-//		//Li *= dsi * ak[rks][rks] * (GetEigenVector(cvl_, i - 1) - GetEigenVector(cvl, i - 1)); // dW; // (GetEigenVector(cvl_, i - 1) - GetEigenVector(cvl, i - 1));
-//		//if (i == 1) Li = Li.setZero();
-//		Li *= /*dsi **/ ak[rks][rks] * (Wijk[i - 1] - GetEigenVector(cvold_, i - 1)) * a[i - 1]; // dW; // (GetEigenVector(cvl_, i - 1) - GetEigenVector(cvl, i - 1));
-//		//if (i > 1) {
-//		//	dsi = -0.5 * (a[i - 2] + a[i - 1]);		//  ** MINUS ?? **
-//
-//		//	GetFluxAndJacobian(i - 2, flux, cvl, jac, true);
-//		//	Li += dsi * ak[rks][rks] * ((GetJacobian(jac) + GetJacobian(jac).cwiseAbs()) / 2.) * (GetEigenVector(cvl_, i - 2) - GetEigenVector(cvl, i - 2)); // dW; // (GetEigenVector(cvl_, i - 2) - GetEigenVector(cvl, i - 2));
-//		//}
-//		//else {
-//		//	Li *= 0.;
-//		//}
-//
-//		//dW = Wijk[i - 1] - GetEigenVector(cvold, i - 1);
-//		//ToVector(dW);
-//
-//		//LdW1 = Li * dW;
-//		LdW1 = Li;
-//		DdWijk[i] = -GetEigenVector(rhs, i) * ak[rks][rks] - LdW1;
-//		for (int l = 0; l < rks; ++l)
-//		{
-//			DdWijk[i] -= ak[rks][l] * GetEigenVector(rhsstage[l], i);
-//		}
-//
-//		Wijk[i] = (invD[i] * DdWijk[i] + GetEigenVector(cvold, i)) / a[i];
-//		cvstage[0][i] = Wijk[i](0);
-//		cvstage[1][i] = Wijk[i](1);
-//		cvstage[2][i] = Wijk[i](2);
-//	}
-//
-//	// Second sweep
-//	cvstage = cvold_;
-//	for (int i = ib2 - 1; i >= 1; --i)
-//	{
-//		//LRState(cvold, ls_, rs_);
-//		//LRState(cvstage, ls_, rs_);
-//		//cvl_ = MakeCV(ls_);
-//		cvr_ = MakeCV(rs_);
-//
-//		dsi = -0.5 * (a[i] + a[i + 1]);
-//
-//		//dW = GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold, i + 1);
-//		//dW = (GetEigenVector(cvr_, i) - GetEigenVector(cvr, i));
-//
-//		Ui = 0.5*(U_SGS[i] - U_SGS[i].cwiseAbs()) * dsi;
-//		if (i < ib2 - 1) {
-//			dsi = 0.5 * (a[i + 1] + a[i + 2]);
-//			Ui += 0.5*(U_SGS[i + 1] - U_SGS[i + 1].cwiseAbs()) * dsi;
-//			Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);
-//		}
-//		/*Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);*/
-//		////GetFluxAndJacobian(i + 1, flux, cvold_, jac, false);
-//		//GetFluxAndJacobian(i, flux, cvr, jac, false);
-//		//Ui = GetJacobian(jac);
-//		//Ui = (Ui - Ui.cwiseAbs()) / 2.;
-//		//Ui *= dsi * ak[rks][rks] * (GetEigenVector(cvr_, i) - GetEigenVector(cvr, i)); // dW;
-//
-//		//GetFluxAndJacobian(i + 1, flux, cvold_, jac, true, true);
-//		Ui = GetJacobian(jac);
-//		dsi = -0.5 * (a[i] + a[i + 1]);
-//		Ui = 0.5 * (Ui - Ui.cwiseAbs()) * dsi;
-//		Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);
-//
-//		Ui.setZero(eq_num, eq_num);
-//		if (i < ib2 - 1)
-//			Ui = 0.5 * (-(U_SGS[i + 1] - U_SGS[i]) * 0.5 * (a[i] + a[i + 1]) - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);
-//
-//		//GetFluxAndJacobian(i + 1, flux, cvr_, jac, false);
-//		//GetFluxAndJacobian(i + 1, flux, cvold_, jac, false);
-//		//Ui = GetJacobian(jac);
-//		//Ui = (Ui - Ui.cwiseAbs()) / 2.;
-//		//if (i == ib2 - 1) Ui = Ui.setZero();
-//		Ui *= /*dsi **/ ak[rks][rks] * (GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold_, i + 1)) * a[i + 1]; // dW;
-//
-//		//if (i < ib2 - 1) {
-//		//	dsi = 0.5 * (a[i + 1] + a[i + 2]);
-//
-//		//	GetFluxAndJacobian(i + 1, flux, cvr, jac, false);
-//		//	Ui += dsi * ak[rks][rks] * ((GetJacobian(jac) - GetJacobian(jac).cwiseAbs()) / 2.) * (GetEigenVector(cvr_, i + 1) - GetEigenVector(cvr, i + 1)); // dW;
-//		//}
-//		//else {
-//		//	Ui *= 0.;
-//		//}
-//		//dW = GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold, i + 1);
-//		//ToVector(dW);
-//
-//		//UdWn = Ui * dW;
-//		UdWn = Ui;
-//		DdWijkn = DdWijk[i] - UdWn;
-//
-//		dW = invD[i] * DdWijkn;
-//		DdWijk[i] = dW;
-//		Wi = (GetEigenVector(cvold, i) + dW) / a[i];
-//		cvstage[0][i] = Wi(0);
-//		cvstage[1][i] = Wi(1);
-//		cvstage[2][i] = Wi(2);
-//	}
-//
-//	/*for (int eq = 0; eq < eq_num; ++eq)
-//	{
-//		for (int i = 0; i < imax; ++i)
-//		{
-//			cvold_[eq][i] = cvstage[eq][i] * a[i];
-//		}
-//	}*/
-//
-//	//LRState(cvold_, ls_, rs_);		// not old ofcourse, it is new
-//	//LRState(cvold, ls, rs);
-//	
-//	/*vector < vector < double > >	cvl_(eq_num, vector < double >(imax, 0.)),
-//									cvr_(eq_num, vector < double >(imax, 0.));*/
-//
-//	/*cvl_ = MakeCV(ls_);
-//	cvr_ = MakeCV(rs_);
-//	cvl = MakeCV(ls);
-//	cvr = MakeCV(rs);*/
-//
-//	for (int i = 1; i < ib2; ++i)
-//	{
-//		VectorXd rhsadd;
-//
-//		//GetFluxAndJacobian(i, flux, cvl_, jac, true, true);
-//		//Li = (GetJacobian(jac) + GetJacobian(jac).cwiseAbs()) / 2. * (GetEigenVector(cvl_, i) - GetEigenVector(cvl, i)) * (a[i + 1] + a[i]) / 2.;
-//		Li = /*0.5*(L_SGS[i - 1] + L_SGS[i - 1].cwiseAbs())*/ L_SGS[i - 1] * (a[i - 1] + a[i]) / 2.;// *(GetEigenVector(cvstage, i - 1) - GetEigenVector(cvold_, i - 1))* a[i - 1];
-//		if (i > 1) {
-//			Li -= /*0.5*(L_SGS[i - 2] + L_SGS[i - 2].cwiseAbs())*/ L_SGS[i - 2] * (a[i - 2] + a[i - 1]) / 2.;// *(GetEigenVector(cvstage, i - 1) - GetEigenVector(cvold_, i - 1))* a[i - 1];
-//			//Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);
-//		}
-//		else {
-//			Li.setZero(eq_num, eq_num);
-//		}
-//		/*Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);*/
-//
-//		/*GetFluxAndJacobian(i - 1, flux, cvold_, jac, true, true);
-//		Li = GetJacobian(jac);
-//		dsi = 0.5 * (a[i] + a[i - 1]);
-//		Li = 0.5 * (Li + Li.cwiseAbs()) * dsi;*/
-//		//Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i - 1) * omega);
-//
-//		Li *= (GetEigenVector(cvstage, i - 1) - GetEigenVector(cvold_, i - 1)) * a[i - 1];
-//		//if (i == 1) Li = Li.setZero();
-//
-//		//GetFluxAndJacobian(i, flux, cvstage, jac, true);
-//		//Li = (GetJacobian(jac) + GetJacobian(jac).cwiseAbs()) / 2. * /*(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))*/DdWijk[i] * (a[i + 1] + a[i]) / 2.;
-//		rhsadd = Li*1.;
-//
-//		//GetFluxAndJacobian(i, flux, cvr_, jac, false, true);
-//		//Ui = (GetJacobian(jac) - GetJacobian(jac).cwiseAbs()) / 2. * (GetEigenVector(cvr_, i) - GetEigenVector(cvr, i)) * (a[i + 1] + a[i]) / 2.;
-//
-//		Ui = -/*0.5*(U_SGS[i] - U_SGS[i].cwiseAbs())*/ U_SGS[i] * (a[i + 1] + a[i]) / 2.;// *(GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold_, i + 1))* a[i + 1];
-//		if (i < ib2 - 1) {
-//			Ui += /*0.5*(U_SGS[i + 1] - U_SGS[i + 1].cwiseAbs())*/ U_SGS[i + 1] * (a[i + 2] + a[i + 1]) / 2.;// *(GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold_, i + 1))* a[i + 1];
-//			//Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);
-//		}
-//		else {
-//			Ui.setZero(eq_num, eq_num);
-//		}
-//
-//		/*GetFluxAndJacobian(i + 1, flux, cvold_, jac, true, true);
-//		Ui = GetJacobian(jac);
-//		dsi = -0.5 * (a[i] + a[i + 1]);
-//		Ui = 0.5 * (Ui - Ui.cwiseAbs()) * dsi;*/
-//		//Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);
-//
-//		/*Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i + 1) * omega);*/
-//		Ui *= (GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold_, i + 1)) * a[i + 1];
-//		//if (i == ib2 - 1) Li = Ui.setZero();
-//
-//		//GetFluxAndJacobian(i, flux, cvstage, jac, false);
-//		//Ui = -(GetJacobian(jac) - GetJacobian(jac).cwiseAbs()) / 2. * /*(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))*/DdWijk[i] * (a[i - 1] + a[i]) / 2.;
-//		rhsadd += Ui*1;
-//
-//		//GetFluxAndJacobian(i - 1, flux, cvl_, jac, true, true);
-//		//Li = (GetJacobian(jac) + GetJacobian(jac).cwiseAbs()) / 2. * (GetEigenVector(cvl_, i - 1) - GetEigenVector(cvl, i - 1)) * (a[i - 1] + a[i]) / 2.;
-//
-//		Li = /*0.5*(L_SGS[i] + L_SGS[i].cwiseAbs())*/ L_SGS[i] * (a[i + 1] + a[i]) / 2.;// *(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))* a[i];
-//		Li -= /*0.5*(L_SGS[i - 1] + L_SGS[i - 1].cwiseAbs())*/ L_SGS[i - 1] * (a[i - 1] + a[i]) / 2.;// *(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))* a[i];
-//		//Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		Li *= (GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i)) * a[i];
-//
-//		//GetFluxAndJacobian(i, flux, cvold_, jac, true, true);
-//		//Li = GetJacobian(jac);
-//		//Ui = Li;
-//		//dsi = 0.5 * (a[i] + a[i + 1]);
-//		//Li = 0.5 * (Li + Li.cwiseAbs()) * dsi;
-//		////Li = 0.5 * (Li + MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		//Li *= (GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i)) * a[i];
-//
-//		//GetFluxAndJacobian(i - 1, flux, cvstage, jac, true);
-//		//Li = (GetJacobian(jac) + GetJacobian(jac).cwiseAbs()) / 2. * /*(GetEigenVector(cvstage, i - 1) - GetEigenVector(cvold_, i - 1))*/DdWijk[i] * (a[i - 1] + a[i]) / 2.;
-//		rhsadd += Li*1;
-//
-//		//GetFluxAndJacobian(i - 1, flux, cvr_, jac, false, true);
-//		//Ui = (GetJacobian(jac) - GetJacobian(jac).cwiseAbs()) / 2. * (GetEigenVector(cvr_, i - 1) - GetEigenVector(cvr, i - 1)) * (a[i - 1] + a[i]) / 2.;
-//
-//		Ui = /*0.5*(U_SGS[i] - U_SGS[i].cwiseAbs())*/ U_SGS[i]  * (a[i + 1] + a[i]) / 2.;// *(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))* a[i];
-//		Ui -= /*0.5*(U_SGS[i - 1] - U_SGS[i - 1].cwiseAbs())*/ U_SGS[i - 1] * (a[i - 1] + a[i]) / 2.;// *(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))* a[i];
-//		//Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		Ui *= (GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i)) * a[i];
-//
-//		//dsi = -0.5 * (a[i] + a[i - 1]);
-//		//Ui = 0.5 * (Ui - Ui.cwiseAbs()) * dsi;
-//		////Ui = 0.5 * (Ui - MatrixXd::Identity(eq_num, eq_num) * SpectralRadius(cvold, i) * omega);
-//		//Ui *= (GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i)) * a[i];
-//
-//		//GetFluxAndJacobian(i + 1, flux, cvstage, jac, false);
-//		//Ui = -(GetJacobian(jac) - GetJacobian(jac).cwiseAbs()) / 2. * /*(GetEigenVector(cvstage, i + 1) - GetEigenVector(cvold_, i + 1))*/DdWijk[i] * (a[i + 1] + a[i]) / 2.;
-//		rhsadd += Ui*1;
-//
-//		rhsadd -= D_SGS[i] * vol[i] * (GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))/*DdWijk[i]*/ * 1.;
-//
-//
-//		/*rhsadd = 
-//			(L_SGS[i] * (GetEigenVector(cvl_, i) - GetEigenVector(cvl, i)) + U_SGS[i] * (GetEigenVector(cvr_, i) - GetEigenVector(cvr, i))) * (a[i + 1] + a[i]) / 2.
-//			- (L_SGS[i-1] * (GetEigenVector(cvl_, i-1) - GetEigenVector(cvl, i-1)) + U_SGS[i-1] * (GetEigenVector(cvr_, i-1) - GetEigenVector(cvr, i-1))) * (a[i - 1] + a[i]) / 2.
-//			- D_SGS[i] * vol[i] * (GetEigenVector(cvstage, i) - GetEigenVector(cvold, i));*/
-//
-//		rhsstage[rks][0][i] = rhs[0][i] + rhsadd(0) * 1.;
-//		rhsstage[rks][1][i] = rhs[1][i] + rhsadd(1) * 1.;
-//		rhsstage[rks][2][i] = rhs[2][i] + rhsadd(2) * 1.;
-//
-//		adtv = ck[rks] * cfl * dt[i];
-//
-//		/*rhsstage[rks][0][i] = -(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))(0) * a[i] * vol[i] / adtv;
-//		rhsstage[rks][1][i] = -(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))(1) * a[i] * vol[i] / adtv;
-//		rhsstage[rks][2][i] = -(GetEigenVector(cvstage, i) - GetEigenVector(cvold_, i))(2) * a[i] * vol[i] / adtv;
-//
-//		for (int l = 0; l < rks; ++l)
-//		{
-//			rhsstage[rks][0][i] -= ak[rks][l] * rhsstage[l][0][i];
-//			rhsstage[rks][1][i] -= ak[rks][l] * rhsstage[l][1][i];
-//			rhsstage[rks][2][i] -= ak[rks][l] * rhsstage[l][2][i];
-//		}
-//		rhsstage[rks][0][i] /= ak[rks][rks];
-//		rhsstage[rks][1][i] /= ak[rks][rks];
-//		rhsstage[rks][2][i] /= ak[rks][rks];*/
-//	}
-//}
 
 void Solver::GetWn(vector < vector < double > >& Wn_)
 {
@@ -2071,22 +1512,6 @@ void Solver::LUSGS(DiagonalFunc D_Func, LUFunc L_Func, LUFunc U_Func, int rks, v
 	//	rhsstage[rks][1][i] = rhs[1][i] + rhsadd(1) * 1.;
 	//	rhsstage[rks][2][i] = rhs[2][i] + rhsadd(2) * 1.;
 	//}
-}
-
-vector < vector < double > > Solver::MakeCV(vector < vector < double > >& fv_)
-{
-	vector < vector < double > > cv_(eq_num, vector < double > (imax));
-
-	for (int i = 0; i < ib2 /*+ 1*/; ++i)
-	{
-		cv_[0][i] = fv_[RHO][i]/* * a[i]*/;
-
-		cv_[1][i] = fv_[RHO][i] * fv_[U][i]/* * a[i]*/;
-
-		cv_[2][i] = /*fv_[RHO][i] **/ (fv_[P][i] / (gamma - 1.) + 0.5 * fv_[RHO][i] * pow(fv_[U][i], 2)) /*/ fv_[RHO][i]*//* * a[i]*/;
-	}
-
-	return cv_;
 }
 
 MatrixXd Solver::ToEigen(vector < vector < double > >& M)
@@ -2620,7 +2045,7 @@ Solver::eq_term::eq_term(const string& term_s)
 		op = operation::mult;
 		op_pos = 1;
 		break;
-	case '\\':
+	case '/':
 		op = operation::div;
 		op_pos = 1;
 		break;

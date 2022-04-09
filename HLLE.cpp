@@ -81,8 +81,8 @@ void HLLE::LRState(string var_)
 			rs[eq][i] = fv[eq][i + 1] - 0.5 * delt_r;
 			ls[eq][i] = fv[eq][i + 0] + 0.5 * delt_l;
 		}
-		rs[2][i] = max(rs[2][i], 1e-20);
-		ls[2][i] = max(ls[2][i], 1e-20);
+		rs[P][i] = max(rs[P][i], 1e-20);
+		ls[P][i] = max(ls[P][i], 1e-20);
 	}
 
 }
@@ -258,9 +258,9 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	using adept::adouble;
 	bool contact = solver_name == "hllc";
 
-	adouble r, u, p_, h, c;
+	adouble r, u, p_, h, e, c;
 	adouble RT, uh, Hh, ch, SLm, SRp;
-	double ro, uo, po, ho, co;
+	double ro, uo, po, ho, eo, co;
 	double rav, uav, pav, cav, machn, h1;
 	double bfac, afac;
 	//double rr, ur, pr, hr, cr, machr, MpL, MmR, M;
@@ -272,15 +272,17 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 
 	r = x_[RHO_A];
 	u = x_[RHO_U_A] / x_[RHO_A];
+	e = x_[RHO_E_A] / x_[RHO_A];
 	p_ = (gamma_ - 1.) * (x_[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
 
 	c = sqrt(gamma_ * p_ / r);
 	h = gamma_ / (gamma_ - 1.) * p_ / r + 0.5 * pow(u, 2);
 
-	vector<adept::adouble> field_vars = { r, u, p_, h };
+	vector<adept::adouble> field_vars = { r, u, p_, e, h };
 
 	ro = (direction > 0 ? rs[RHO][i] : ls[RHO][i]);
 	uo = (direction > 0 ? rs[U][i] : ls[U][i]);
+	eo = (direction > 0 ? rs[E][i] : ls[E][i]);
 	po = (direction > 0 ? rs[P][i] : ls[P][i]);
 
 	co = sqrt(gamma_ * po / ro);

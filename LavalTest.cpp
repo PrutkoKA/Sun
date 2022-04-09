@@ -592,59 +592,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 
 			for (int iter = 0; iter < maxiter && drho > convtol && true; ++iter)
 			{
-				
-				if (cusp_s->remesh && false) {
-					vector <double> old_coords = cusp_s->grid.GetCoordinates();
-					// New adaptive grid
-					for (int i = 0; i < 1; ++i) {
-						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
-							cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
-
-						cusp_s->grid.CalculateResolution(1., 1., cusp_s->c_var_name[cusp_s->RHO_A], "coordinate");
-						cusp_s->grid.CalculateConcentration(1., "coordinate");
-
-						cusp_s->x = cusp_s->grid.RefineMesh(physDt_, 1e-2);
-
-						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
-							cusp_s->cv[var] = cusp_s->grid.GetValues(cusp_s->c_var_name[var]);
-
-						cusp_s->RefreshBoundaries();						// Refresh boundary conditions
-						cusp_s->RhoUPH();
-
-						cusp_s->CalculateVolumes();
-						cusp_s->grid.SetRow("volume", cusp_s->vol);
-					}
-					// Now we will reevaluate cvn, cvnm1, cvold
-					set < vector < vector < double > >* > cvs{ &cusp_s->cvn, &cusp_s->cvnm1, &cusp_s->cvold };
-
-					for (auto it : cvs)
-					{
-						cusp_s->grid.SetRow("coordinate", old_coords);
-						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
-							cusp_s->grid.SetRow(cusp_s->c_var_name[var], (*it)[var]);
-
-						vector < string > ignore;
-						vector < vector < double > > new_tab;
-						ignore.push_back(cusp_s->grid.TYPE_COL);
-						new_tab = cusp_s->grid.NewTable("coordinate", cusp_s->x, ignore, false);
-						cusp_s->grid.SetData(new_tab);
-
-						for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
-							(*it)[var] = cusp_s->grid.GetValues(cusp_s->c_var_name[var]);
-					}
-
-					cusp_s->grid.SetRow("coordinate", cusp_s->x);
-					for (int var = 0; var < cusp_s->CONS_VAR_COUNT; ++var)
-						cusp_s->grid.SetRow(cusp_s->c_var_name[var], cusp_s->cv[var]);
-
-					cusp_s->calculate_mass_matrix();
-					cusp_s->fill_inverse_mass_matrix();
-				}
-
-
 				drho = cusp_s->Solve(physDt_);
-				//drho = cusp_s->SolveImplicit();
-				//break;
 			}
 
 			vector <double> old_coords = cusp_s->grid.GetCoordinates();
