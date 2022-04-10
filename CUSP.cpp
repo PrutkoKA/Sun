@@ -209,20 +209,24 @@ void CUSP::RHS(int i)
 		
 		// average of left and right convective fluxes
 		for (int eq = 0; eq < eq_num; ++eq) {
-			vector < vector < int > >& cur_dx = equations[eq].cur_dx;
 
-			fcav[eq] = 0;		// Flux Convective AVerage
-			for (int id = 0; id < cur_dx.size(); ++id) 
-			{
-				term_l = 1.;
-				term_r = 1.;
-				for (auto var : cur_dx[id]) 
-				{
-					term_l *= ls[var][i];
-					term_r *= rs[var][i];
-				}
-				fcav[eq] += term_l + term_r;
-			}
+			// TODO:
+			// Make work with new logic!
+
+			//vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+			//fcav[eq] = 0;		// Flux Convective AVerage
+			//for (int id = 0; id < cur_dx.size(); ++id) 
+			//{
+			//	term_l = 1.;
+			//	term_r = 1.;
+			//	for (auto var : cur_dx[id]) 
+			//	{
+			//		term_l *= ls[var][i];
+			//		term_r *= rs[var][i];
+			//	}
+			//	fcav[eq] += term_l + term_r;
+			//}
 		}
 
 		// dissipative fluxes
@@ -246,7 +250,11 @@ void CUSP::RHS(int i)
 		afac = abs(uav) - bfac * uav;
 
 		for (int eq = 0; eq < eq_num; ++eq) {
-			vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+			// TODO:
+			// Make work with new logic!
+
+			/*vector < vector < int > >& cur_dx = equations[eq].cur_dx;
 			vector < vector < int > >& cur_dt = equations[eq].cur_dt;
 
 			fdiss[eq] = 0.;
@@ -271,7 +279,7 @@ void CUSP::RHS(int i)
 					term_r *= rs[var][i];
 				}
 				fdiss[eq] += bfac * (term_r - term_l);
-			}
+			}*/
 		}
 
 		// total fluxes at i+1/2
@@ -287,9 +295,9 @@ void CUSP::RHS(int i)
 	for (int i = 1; i < ib2; ++i)
 	{
 		for (int eq = 0; eq < eq_num; ++eq) {
-			int dt_var = equations[eq].dt_var;
+			//int dt_var = equations[eq].dt_var;
 
-			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 		}
 	}
 }
@@ -375,9 +383,9 @@ void CUSP::SetRHS()
 	{
 		//da = 0.5 * (a[i + 1] - a[i - 1]);
 		for (int eq = 0; eq < eq_num; ++eq) {
-			int dt_var = equations[eq].dt_var;
+			//int dt_var = equations[eq].dt_var;
 
-			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 			/*if (dt_var == RHO_U_A)
 				rhs[dt_var][i] = rhs[dt_var][i] - p[i] * da;*/
 		}

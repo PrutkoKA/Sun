@@ -183,9 +183,9 @@ void HLLE::SetRHS()
 	for (int i = 1; i < ib2; ++i)
 	{
 		for (int eq = 0; eq < eq_num; ++eq) {
-			int dt_var = equations[eq].dt_var;
+			//int dt_var = equations[eq].dt_var;
 
-			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 		}
 		SourceTerm(i);
 	}
@@ -449,27 +449,10 @@ vector<adept::adouble> HLLE::construct_hlle_flux_array(const vector<adept::adoub
 	unsigned int eq = 0;
 	for (const auto& equation : equations)
 	{
-		for (const auto& dx_term : equation.cur_dx)
-		{
-			adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
-			for (const auto& var : dx_term)
-			{
-				term *= vars[var];
-			}
-			flux[eq] += term;
-		}
-		for (const auto& dt_term : equation.cur_dt)
-		{
-			adept::adouble term = -SRp * SLm * direction;
-			for (const auto& var : dt_term)
-			{
-				if (var == H)
-					term *= (vars[var] - vars[P] / vars[RHO]);
-				else
-					term *= vars[var];
-			}
-			flux[eq] += term;
-		}
+		adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars) * term;
+		term = -SRp * SLm * direction;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars) * term;
 		flux[eq] /= (SRp - SLm);
 		++eq;
 	}
@@ -486,27 +469,10 @@ vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adoub
 	unsigned int eq = 0;
 	for (const auto& equation : equations)
 	{
-		for (const auto& dt_term : equation.cur_dt)
-		{
-			adept::adouble term = (direction > 0. ? SLm : SRp);
-			for (const auto& var : dt_term)
-			{
-				if (var == H)
-					term *= (vars[var] - vars[P] / vars[RHO]);
-				else
-					term *= vars[var];
-			}
-			flux[eq] += term;
-		}
-		for (const auto& dx_term : equation.cur_dx)
-		{
-			adept::adouble term = -1.;
-			for (const auto& var : dx_term)
-			{
-				term *= vars[var];
-			}
-			flux[eq] += term;
-		}
+		adept::adouble term = (direction > 0. ? SLm : SRp);
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars) * term;
+		term = -1.;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars) * term;
 		flux[eq] *= S_star;
 		flux[eq] += p_star * D_star[eq];
 		

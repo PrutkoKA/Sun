@@ -324,36 +324,44 @@ void VL::RHS(int i)
 
 		if (M >= 1.) {
 			for (int eq = 0; eq < eq_num; ++eq) {
-				fcavm[eq] = 0.;
-				vector < vector < int > >& cur_dx = equations[eq].cur_dx;
 
-				fcavp[eq] = 0.;		// Flux Convective AVerage
-				for (int id = 0; id < cur_dx.size(); ++id)
-				{
-					term = 1.;
-					for (auto var : cur_dx[id])
-					{
-						term *= ls[var][i];
-					}
-					fcavp[eq] += term;
-				}
+				// TODO:
+				// Make work with new logic!
+
+				//fcavm[eq] = 0.;
+				//vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+				//fcavp[eq] = 0.;		// Flux Convective AVerage
+				//for (int id = 0; id < cur_dx.size(); ++id)
+				//{
+				//	term = 1.;
+				//	for (auto var : cur_dx[id])
+				//	{
+				//		term *= ls[var][i];
+				//	}
+				//	fcavp[eq] += term;
+				//}
 			}
 		}
 		else if (M <= -1.) {
 			for (int eq = 0; eq < eq_num; ++eq) {
-				fcavp[eq] = 0.;
-				vector < vector < int > >& cur_dx = equations[eq].cur_dx;
 
-				fcavm[eq] = 0.;		// Flux Convective AVerage
-				for (int id = 0; id < cur_dx.size(); ++id)
-				{
-					term = 1.;
-					for (auto var : cur_dx[id])
-					{
-						term *= rs[var][i];
-					}
-					fcavm[eq] += term;
-				}
+				// TODO:
+				// Make work with new logic!
+
+				//fcavp[eq] = 0.;
+				//vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+				//fcavm[eq] = 0.;		// Flux Convective AVerage
+				//for (int id = 0; id < cur_dx.size(); ++id)
+				//{
+				//	term = 1.;
+				//	for (auto var : cur_dx[id])
+				//	{
+				//		term *= rs[var][i];
+				//	}
+				//	fcavm[eq] += term;
+				//}
 			}
 		}
 		else {
@@ -384,9 +392,9 @@ void VL::RHS(int i)
 	for (int i = 1; i < ib2; ++i)
 	{
 		for (int eq = 0; eq < eq_num; ++eq) {
-			int dt_var = equations[eq].dt_var;
+			//int dt_var = equations[eq].dt_var;
 
-			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 		}
 	}
 }
@@ -665,9 +673,9 @@ void VL::SetRHS()
 	{
 		//da = 0.5 * (a[i + 1] - a[i - 1]);
 		for (int eq = 0; eq < eq_num; ++eq) {
-			int dt_var = equations[eq].dt_var;
+			//int dt_var = equations[eq].dt_var;
 
-			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
+			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 			/*if (dt_var == RHO_U_A)
 				rhs[dt_var][i] = rhs[dt_var][i] - p[i] * da;*/
 		}

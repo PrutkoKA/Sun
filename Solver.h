@@ -9,8 +9,6 @@
 #include <set>
 #include "yaml-cpp/yaml.h"
 #include "adept.h"
-//#include "adept/adept.h"
-//#include "adept/adept_source.h"
 
 #include "Loop.h"
 
@@ -28,7 +26,6 @@ using namespace Eigen;
 
 using namespace std;
 
-// set < string > solvers;
 struct sol_struct
 {
 	string gas;
@@ -64,12 +61,29 @@ struct sol_struct
 	string solver_name;
 };
 
+enum class operation
+{
+	plus,
+	minus,
+	mult,
+	div
+};
+
+struct eq_term
+{
+	operation op;
+	string name;
+	double degree;
+	double coef;
+
+	eq_term(const operation op_, const string name_, const double degree_, const double coef_ = 1.) : op(op_), name(name_), degree(degree_), coef(coef_) {};
+	eq_term(const string& term_s);
+};
+
 class Solver
 {
 public:
-	//map < string, int > vars { {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
-	//map < string, int > vars_o { {"Rho", 0}, {"U", 1}, {"p", 2}, {"H", 3} };
 	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}/*, {"C2", 5}*//*, {"n", 4}*/};
 	enum Vars_o {
 		RHO,
@@ -78,8 +92,6 @@ public:
 		E,
 		H,
 		FIELD_VAR_COUNT
-		//, C2,		// extra variables
-		//n*/
 	};
 
 	map<int, string> var_name = {
@@ -101,7 +113,7 @@ public:
 		{RHO_A, "RhoA"},
 		{RHO_U_A, "RhoUA"},
 		{RHO_E_A, "RhoEA"}
-};
+	};
 
 	double omega = 1.;
 	double beta = 2;
@@ -122,50 +134,27 @@ public:
 
 	int time_stepping;
 
-	//int RHO_A = 0,
-	//	RHO_U_A = 1,
-	//	RHO_E_A = 2/*,
-		//N_A = 3*/;
-		//N_A = 3*/;
-
+	
+	map<operation, string> op_name = { {operation::plus, "+"}, {operation::minus, "-"}, {operation::mult, "*"}, {operation::div, "/"} };
+	map<string, operation> name_to_op = { {"+", operation::plus}, {"-", operation::minus}, {"*", operation::mult}, {"/", operation::div} };
+	
 	struct equation
 	{
 		enum class term_name
 		{
 			dt,
 			dx,
-			fv
+			source
 		};
 
 		string eq_name;
-		int dt_var;
-		vector < vector < int > > cur_dt;
-		vector < vector < int > > cur_dx;
-		vector < vector < int > > cur_fv;
+		pair<string, vector<eq_term>> cur_dt;
+		pair<string, vector<eq_term>> cur_dx;
+		pair<string, vector<eq_term>> cur_source;
 
-		equation(string eq_name_, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
-		equation(string eq_name_, string term_, map < string, int > vars_, map < string, int > vars_o_);
-		vector < vector < int > > term(string dt_term_, map < string, int > vars_o, term_name term_name_);
-	};
-
-	enum class operation
-	{
-		plus,
-		minus,
-		mult,
-		div
-	};
-	map<operation, string> op_name = { {operation::plus, "+"}, {operation::minus, "-"}, {operation::mult, "*"}, {operation::div, "/"} };
-	map<string, operation> name_to_op = { {"+", operation::plus}, {"-", operation::minus}, {"*", operation::mult}, {"/", operation::div} };
-	struct eq_term
-	{
-		operation op;
-		string name;
-		double degree;
-		double coef;
-
-		eq_term(const operation op_, const string name_, const double degree_, const double coef_ = 1.) : op (op_), name(name_), degree(degree_), coef(coef_) {};
-		eq_term(const string& term_s);
+		equation(string eq_name_, vector<string> dt_term_, vector<string> dx_term_, vector<string> source_term, map < string, int > vars_, map < string, int > vars_o_);
+		pair<string, vector<eq_term>> get_equation(const string& eq_name, const vector<string>& eq_terms_s);
+		pair<string, vector<eq_term>> get_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	};
 
 	using DiagonalFunc = std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int,
@@ -213,18 +202,16 @@ public:
 	bool time_expl;
 	double Global_Time;
 
-	/*vector < vector < vector < double > > > L_SGS;
-	vector < vector < vector < double > > > U_SGS;
-	vector < vector < vector < double > > > D_SGS;*/
 	vector < MatrixXd > L_SGS;
 	vector < MatrixXd > U_SGS;
 	vector < MatrixXd > D_SGS;
 
 	Solver(sol_struct& sol_init_);
 
-	void SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_);
+	void SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_);
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
+	adept::adouble make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars);
 	double make_fv_equation(const string& eq_name, const int point);
 	adept::adouble make_fv_equation(const string& eq_name, const vector<adept::adouble>& field_var, const adept::adouble* cons_var);
 
@@ -280,12 +267,6 @@ public:
 	void CVProcessing(vector < vector < vector < double > > >& rhsstage, vector < vector < vector < double > > >& cvstage, int rks, DiagonalFunc D_Func = NULL, LUFunc L_Func = NULL, LUFunc U_Func = NULL);
 	void FinalTSRK_CV_Calculation(vector < vector < vector < double > > >& rhsstage, vector < vector < vector < double > > >& cvstage);
 	void FinalImplicitRHS_CV_Calculation(vector < vector < vector < double > > >& rhsstage, vector < vector < vector < double > > >& cvstage);
-
-	//using DiagonalFunc = MatrixXd(*)(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, double, double, double, int);
-	//typedef MatrixXd(* DiagonalFunc)(void*, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, double, double, double, int);
-
-	//using DiagonalFunc = std::function < MatrixXd (std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int) >;
-	//using LUFunc2 = std::function < MatrixXd(std::vector < MatrixXd >&, int, std::vector < std::vector < double > >&) >;
 
 	void GetWn(vector < vector < double > >& Wn_);
 	MatrixXd Diagonal(vector < MatrixXd >& LeftFluxJac, vector <MatrixXd >& RightFluxJac, vector < MatrixXd >& SourceJac, vector < vector < double > >& cv_, int i, LUFunc L_Func, LUFunc U_Func);

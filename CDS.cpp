@@ -154,18 +154,22 @@ void CDS::RHS(int i)
 		si = 0.5 * (a[i + 1] + a[i]);
 
 		for (int eq = 0; eq < eq_num; ++eq) {
-			vector < vector < int > >& cur_dx = equations[eq].cur_dx;
 
-			f[eq * imax + i] = 0;		// Flux Convective AVerage
-			for (int id = 0; id < cur_dx.size(); ++id) 
-			{
-				term_ = 1.;
-				for (auto var : cur_dx[id]) 
-					term_ *= 0.5 * (fv[var][i + 1] + fv[var][i]);
+			// TODO:
+			// Make work with new logic!
 
-				term_ *= si;
-				f[eq * imax + i] += term_;
-			}
+			//vector < vector < int > >& cur_dx = equations[eq].cur_dx;
+
+			//f[eq * imax + i] = 0;		// Flux Convective AVerage
+			//for (int id = 0; id < cur_dx.size(); ++id) 
+			//{
+			//	term_ = 1.;
+			//	for (auto var : cur_dx[id]) 
+			//		term_ *= 0.5 * (fv[var][i + 1] + fv[var][i]);
+
+			//	term_ *= si;
+			//	f[eq * imax + i] += term_;
+			//}
 		}
 	}
 

@@ -78,9 +78,9 @@ Solver::Solver(sol_struct& sol_init_) :
 
 	RK_stages_num = RK_stage_coeffs.size();
 
-	SetEquation("mass", "RhoA", "RhoUA", vars, vars_o);	// RhoA, RhoUA
-	SetEquation("impulse", "RhoUA", "(RhoUU+p)A", vars, vars_o);		// RhoUA, (RhoUU+p)A
-	SetEquation("energy", "RhoEA", "(RhoEU+pU)A", vars, vars_o);		// RhoEA, (RhoEU+pU)A
+	SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, vars, vars_o);	// RhoA, RhoUA
+	SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p" }, vars, vars_o);		// RhoUA, (RhoUU+p)A
+	SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "*A" }, { "" }, vars, vars_o);		// RhoEA, (RhoEU+pU)A
 
 	set_fv_equation(		// Rho = RhoA / A
 		"Rho",
@@ -104,9 +104,9 @@ Solver::Solver(sol_struct& sol_init_) :
 	);
 }
 
-void Solver::SetEquation(string eq_name, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_)
+void Solver::SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_)
 {
-	equations.push_back( equation (eq_name, dt_term_, dx_term_, vars_, vars_o_) );
+	equations.push_back( equation (eq_name, dt_term_, dx_term_, source_term, vars_, vars_o_) );
 }
 
 void Solver::set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s)
@@ -123,16 +123,93 @@ void Solver::set_fv_equation(const string& eq_name, const vector<string>& eq_ter
 
 	set_fv_equation(eq_name, eq_terms);
 }
+
 void Solver::set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms)
 {
 	fv_equation.insert(pair<string, vector<eq_term>>(eq_name, eq_terms));
+}
+
+pair<string, vector<eq_term>> Solver::equation::get_equation(const string& eq_name, const vector<string>& eq_terms_s)
+{
+	vector<eq_term> eq_terms;
+
+	eq_terms.reserve(eq_terms_s.size());
+
+	for (auto& term_s : eq_terms_s)
+		if (term_s.size() == 0)
+			continue;
+		else
+			eq_terms.push_back(term_s);
+
+	pair<string, vector<eq_term>> result(eq_name, eq_terms);
+	return result;
+}
+
+pair<string, vector<eq_term>> Solver::equation::get_equation(const string& eq_name, const vector<eq_term>& eq_terms)
+{
+	return pair<string, vector<eq_term>>(eq_name, eq_terms);
+}
+
+adept::adouble Solver::make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars)
+{
+	vector<eq_term> &eq_terms = term_name == equation::term_name::dt ? equations[eq].cur_dt.second :
+								term_name == equation::term_name::dx ? equations[eq].cur_dx.second :
+																	   equations[eq].cur_source.second;
+
+	operation op = eq_terms[0].op;
+	string &var_name_ = eq_terms[0].name;
+	auto get_value = [this, f_vars](const string& var_name_) -> adept::adouble
+	{
+		if (var_name_ == "A")
+			return 1.;
+		if (var_name_ == "GAMMAM")
+			return gamma - 1.;
+		if (var_name_ == "GAMMA")
+			return gamma;
+		return f_vars[vars_o[var_name_]];
+	};
+	adept::adouble value = get_value(var_name_);
+	double degree = eq_terms[0].degree;
+	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+	double coef = eq_terms[0].coef;
+	adept::adouble term = (op == operation::plus ? coef : -coef) * value;
+	auto eq_terms_it = eq_terms.begin();
+	++eq_terms_it;
+	while (eq_terms_it != eq_terms.end())
+	{
+		op = (*eq_terms_it).op;
+		string& var_name_ = (*eq_terms_it).name;
+		value = get_value(var_name_);
+		degree = (*eq_terms_it).degree;
+		coef = (*eq_terms_it).coef;
+		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+		switch (op)
+		{
+		case operation::plus:
+			term += value;
+			break;
+		case operation::minus:
+			term -= value;
+			break;
+		case operation::mult:
+			term *= value;
+			break;
+		case operation::div:
+			term /= value;
+			break;
+		default:
+			break;
+		}
+		++eq_terms_it;
+	}
+	return term;
 }
 
 double Solver::make_fv_equation(const string& eq_name, const int point)
 {
 	auto& eq_terms = fv_equation.at(eq_name);
 	operation op = eq_terms[0].op;
-	string var_name_ = eq_terms[0].name;
+	string &var_name_ = eq_terms[0].name;
 	auto get_value = [this, point](const string& var_name_) -> double 
 	{
 		if (var_name_ == "A")
@@ -156,23 +233,23 @@ double Solver::make_fv_equation(const string& eq_name, const int point)
 	while (eq_terms_it != eq_terms.end())
 	{
 		op = (*eq_terms_it).op;
-		var_name_ = (*eq_terms_it).name;
+		string& var_name_ = (*eq_terms_it).name;
 		value = get_value(var_name_);
 		degree = (*eq_terms_it).degree;
 		coef = (*eq_terms_it).coef;
 		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
 		switch (op)
 		{
-		case Solver::operation::plus:
+		case operation::plus:
 			term += value;
 			break;
-		case Solver::operation::minus:
+		case operation::minus:
 			term -= value;
 			break;
-		case Solver::operation::mult:
+		case operation::mult:
 			term *= value;
 			break;
-		case Solver::operation::div:
+		case operation::div:
 			term /= value;
 			break;
 		default:
@@ -187,7 +264,7 @@ adept::adouble Solver::make_fv_equation(const string& eq_name, const vector<adep
 {
 	auto& eq_terms = fv_equation.at(eq_name);
 	operation op = eq_terms[0].op;
-	string var_name_ = eq_terms[0].name;
+	string& var_name_ = eq_terms[0].name;
 	auto get_value = [this, field_var, cons_var](const string& var_name_) -> adept::adouble
 	{
 		if (var_name_ == "A")
@@ -211,23 +288,23 @@ adept::adouble Solver::make_fv_equation(const string& eq_name, const vector<adep
 	while (eq_terms_it != eq_terms.end())
 	{
 		op = (*eq_terms_it).op;
-		var_name_ = (*eq_terms_it).name;
+		string& var_name_ = (*eq_terms_it).name;
 		value = get_value(var_name_);
 		degree = (*eq_terms_it).degree;
 		coef = (*eq_terms_it).coef;
 		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
 		switch (op)
 		{
-		case Solver::operation::plus:
+		case operation::plus:
 			term += value;
 			break;
-		case Solver::operation::minus:
+		case operation::minus:
 			term -= value;
 			break;
-		case Solver::operation::mult:
+		case operation::mult:
 			term *= value;
 			break;
-		case Solver::operation::div:
+		case operation::div:
 			term /= value;
 			break;
 		default:
@@ -1965,65 +2042,15 @@ double Solver::CalcH(double p_, double Rho_, double U_)
 	return gamma / (gamma - 1.) * p_ / Rho_ + 0.5 * U_ * U_;
 }
 
-Solver::equation::equation(string eq_name_, string dt_term_, string dx_term_, map < string, int > vars_, map < string, int > vars_o_)
+Solver::equation::equation(string eq_name_, vector<string> dt_term_, vector<string> dx_term_, vector<string> source_term, map < string, int > vars_, map < string, int > vars_o_)
 {
 	eq_name = eq_name_;
-	dt_var = vars_[dt_term_];
-	cur_dt = term(dt_term_, vars_o_, term_name::dt);
-	cur_dx = term(dx_term_, vars_o_, term_name::dx);
+	cur_dt = get_equation(eq_name_, dt_term_);
+	cur_dx = get_equation(eq_name_, dx_term_);
+	cur_source = get_equation(eq_name, source_term);
 }
 
-Solver::equation::equation(string eq_name_, string term_, map < string, int > vars_, map < string, int > vars_o_)
-{
-	eq_name = eq_name_;
-	//dt_var = vars_[dt_term_];
-	cur_fv = term(term_, vars_o_, term_name::fv);
-}
-
-vector < vector < int > > Solver::equation::term(string term_, map < string, int > vars_o, term_name term_name_)
-{
-	vector < vector < int > > cur_term;
-	int cur_pos = 0;
-	int id = 0;
-
-	if (term_name_ == term_name::dt)
-		if (term_.find_first_of("E") != string::npos)
-			term_[term_.find_first_of("E")] = 'H';
-
-	cur_term.push_back(vector < int >());
-
-	while (cur_pos < term_.size()) {
-		if (term_.find_first_of("(") == cur_pos ||
-			term_.find_first_of(")") == cur_pos ||
-			term_.find_first_of("A") == cur_pos) {
-			cur_pos++;
-			if (cur_pos >= term_.size()) {
-				break;
-			}
-		}
-		if (term_.find_first_of("+") == cur_pos) {
-			cur_term.push_back(vector < int >());
-			id++;
-			cur_pos++;
-		}
-		for (auto it = vars_o.begin(); it != vars_o.end(); ++it)
-		{
-			if (term_.find_first_of(it->first, cur_pos) == cur_pos) {
-				int sign = 1;
-				if (cur_pos != 0 && term_[cur_pos - 1] == '\\')
-					sign = -1;
-
-				cur_term[id].push_back(it->second * sign);
-				cur_pos += (it->first).size();
-				break;
-			}
-		}
-	}
-
-	return cur_term;
-}
-
-Solver::eq_term::eq_term(const string& term_s)
+eq_term::eq_term(const string& term_s)
 {
 	auto get_var_name = [](const string& term_s) -> string
 	{
@@ -2198,19 +2225,6 @@ Solver* CreateReadConfigFile(string file_name)
 		}
 	}
 	if (config["time_treat"].as< string >() == "explicit") {
-		/*if (config["steadiness"].as< string >() == "steady") {
-			sol_init.steadiness = true;
-		}
-		else {
-			sol_init.steadiness = false;
-			if (config["time_stepping"].as< string >() == "dual_time_stepping") {
-				sol_init.time_stepping = 0;
-			}
-			if (config["time_stepping"].as< string >() == "two_step_RK") {
-				sol_init.time_stepping = 1;
-			}
-		}*/
-
 		if (sol_init.steadiness == true || sol_init.time_stepping == 0) {
 			string ERKC_name = "ERKC_" + config["ERK"].as< string >();
 
@@ -2263,13 +2277,6 @@ double Sign(double value)
 	return 0.;
 }
 
-//adept::adouble aSign(adept::adouble value)
-//{
-//	if (value > 0.) return 1.;
-//	if (value < 0.) return -1.;
-//	return 0.;
-//}
-
 int count_(vector < int >& vec, int val)
 {
 	return count(vec.begin(), vec.end(), val);
@@ -2281,15 +2288,8 @@ vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::ado
 	unsigned int eq = 0;
 	for (const auto &equation : equations)
 	{
-		for (const auto &dx_term : equation.cur_dx)
-		{
-			adept::adouble term = 1.;
-			for (const auto& var : dx_term)
-			{
-				term *= vars[var];
-			}
-			flux[eq] += term;
-		}
+		adept::adouble term = 1.;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars) * term;
 		++eq;
 	}
 	return flux;
