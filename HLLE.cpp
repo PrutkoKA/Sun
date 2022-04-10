@@ -258,69 +258,41 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	using adept::adouble;
 	bool contact = solver_name == "hllc";
 
-	adouble r, u, p_, h, e, c;
+	adouble c_l, c_r;
+	vector<adouble> fv_a(var_num), fv_o(var_num);
 	adouble RT, uh, Hh, ch, SLm, SRp;
-	double ro, uo, po, ho, eo, co;
-	double rav, uav, pav, cav, machn, h1;
-	double bfac, afac;
-	//double rr, ur, pr, hr, cr, machr, MpL, MmR, M;
 	double gamma_ = GetGamma();
 	double sign_(Sign(direction));
 
 	bool use_WAF = false && i != 0 && i != ib2 - 1;
 	vector<adept::adouble> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
 
-	r = x_[RHO_A];
-	u = x_[RHO_U_A] / x_[RHO_A];
-	e = x_[RHO_E_A] / x_[RHO_A];
-	p_ = (gamma_ - 1.) * (x_[RHO_E_A] - 0.5 * pow(r * u, 2) / r);
-
-	c = sqrt(gamma_ * p_ / r);
-	h = gamma_ / (gamma_ - 1.) * p_ / r + 0.5 * pow(u, 2);
-
-	vector<adept::adouble> field_vars = { r, u, p_, e, h };
-
-	ro = (direction > 0 ? rs[RHO][i] : ls[RHO][i]);
-	uo = (direction > 0 ? rs[U][i] : ls[U][i]);
-	eo = (direction > 0 ? rs[E][i] : ls[E][i]);
-	po = (direction > 0 ? rs[P][i] : ls[P][i]);
-
-	co = sqrt(gamma_ * po / ro);
-	ho = gamma_ / (gamma_ - 1.) * po / ro + 0.5 * pow(uo, 2);
-
-	if (direction > 0) {
-		RT = adept::sqrt(ro / r);
-		uh = (u + RT * uo) / (1. + RT);
-		Hh = (h + RT * ho) / (1. + RT);
-		ch = sqrt((gamma_ - 1.) * (Hh - uh * uh / 2.) );
-
-		SLm = adept::min(u - c, uh - ch);
-		SRp = adept::max(uo + co, uh + ch);
-	}
-	else {
-		RT = adept::sqrt(r / ro);
-		uh = (uo + RT * u) / (1. + RT);
-		Hh = (ho + RT * h) / (1. + RT);
-		ch = sqrt((gamma_ - 1.) * (Hh - uh * uh / 2.));
-
-		SLm = adept::min(uo - co, uh - ch);
-		SRp = adept::max(u + c, uh + ch);
+	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	{
+		fv_a[var] = make_fv_equation(var_name[var], fv_a, x_);
+		fv_o[var] = (direction > 0 ? rs[var][i] : ls[var][i]);
 	}
 
-	adouble S_star;
-	if (direction > 0.)
-		S_star = (po - p_ + r * u * (SLm - u) - ro * uo * (SRp - uo)) / (r * (SLm - u) - ro * (SRp - uo));
-	else
-		S_star = (p_ - po + ro * uo * (SLm - uo) - r * u * (SRp - u)) / (ro * (SLm - uo) - r * (SRp - u));
+	auto& fv_r = direction > 0 ? fv_o : fv_a;
+	auto& fv_l = direction < 0 ? fv_o : fv_a;
 
-	fcav[RHO_A] = 0.;
-	fcav[RHO_U_A] = 0.;
-	fcav[RHO_E_A] = 0.;
+	c_l = sqrt(gamma_ * fv_l[P] / fv_l[RHO]);
+	c_r = sqrt(gamma_ * fv_r[P] / fv_r[RHO]);
+
+	RT = adept::sqrt(fv_r[RHO] / fv_l[RHO]);
+	uh = (fv_l[U] + RT * fv_r[U]) / (1. + RT);
+	Hh = (fv_l[H] + RT * fv_r[H]) / (1. + RT);
+	ch = sqrt((gamma_ - 1.) * (Hh - uh * uh / 2.) );
+
+	SLm = adept::min(fv_l[U] - c_l, uh - ch);
+	SRp = adept::max(fv_r[U] + c_r, uh + ch);
+
+	adouble S_star = (fv_r[P] - fv_l[P] + fv_l[RHO] * fv_l[U] * (SLm - fv_l[U]) - fv_r[RHO] * fv_r[U] * (SRp - fv_r[U])) / (fv_l[RHO] * (SLm - fv_l[U]) - fv_r[RHO] * (SRp - fv_r[U]));
 
 	//			FL case								FR case
 	if ( (SLm >= 0. && direction > 0.) || (SRp <= 0. && direction < 0.) || use_WAF) {
-		vector<adept::adouble> fcav_copy = construct_side_flux_array(field_vars);
-		copy(fcav_copy.begin(), fcav_copy.end(), fcav);
+		vector<adept::adouble> fcav_copy = construct_side_flux_array(fv_a);
+		move(fcav_copy.begin(), fcav_copy.end(), fcav);
 		if (use_WAF)
 		{
 			if (direction > 0.)
@@ -334,10 +306,12 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	{
 		// FHLLE
 		if ((SLm <= 0. && SRp >= 0.) || use_WAF) {
-			vector<adept::adouble> fcav_copy = construct_hlle_flux_array(field_vars, SLm, SRp, direction);
-			copy(fcav_copy.begin(), fcav_copy.end(), fcav);
+			vector<adept::adouble> fcav_copy = construct_hlle_flux_array(fv_a, SLm, SRp, direction);
+			move(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
+			{
 				FHLLE.assign(fcav, fcav + eq_num);
+			}
 		}
 	}
 	else
@@ -346,8 +320,8 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 		//							FL*	case										FR* case
 		if ( ((SLm <= 0. && S_star >= 0. && direction > 0.) || ((S_star <= 0. && SRp >= 0. && direction < 0.) || use_WAF)) )
 		{
-			vector<adept::adouble> fcav_copy = construct_hllc_flux_array(field_vars, SLm, SRp, S_star, direction);
-			copy(fcav_copy.begin(), fcav_copy.end(), fcav);
+			vector<adept::adouble> fcav_copy = construct_hllc_flux_array(fv_a, SLm, SRp, S_star, direction);
+			move(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
 			{
 				if (direction > 0.)

@@ -226,6 +226,7 @@ public:
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	double make_fv_equation(const string& eq_name, const int point);
+	adept::adouble make_fv_equation(const string& eq_name, const vector<adept::adouble>& field_var, const adept::adouble* cons_var);
 
 	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
 

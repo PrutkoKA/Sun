@@ -93,7 +93,7 @@ Solver::Solver(sol_struct& sol_init_) :
 		var_name[E],
 		{ c_var_name[RHO_E_A],
 			op_name[operation::div] +
-			c_var_name[RHO_E_A], "" }		// There is dummy for unambiguous conservation
+			c_var_name[RHO_A], "" }		// There is dummy for unambiguous conservation
 	);
 	set_fv_equation(		// U = RhoUA / RhoA
 		var_name[U],
@@ -173,6 +173,61 @@ double Solver::make_fv_equation(const string& eq_name, const int point)
 	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
 	double coef = eq_terms[0].coef;
 	double term = (op == operation::plus ? coef : -coef) * value;
+	auto eq_terms_it = eq_terms.begin();
+	++eq_terms_it;
+	while (eq_terms_it != eq_terms.end())
+	{
+		op = (*eq_terms_it).op;
+		var_name_ = (*eq_terms_it).name;
+		value = get_value(var_name_);
+		degree = (*eq_terms_it).degree;
+		coef = (*eq_terms_it).coef;
+		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+		switch (op)
+		{
+		case Solver::operation::plus:
+			term += value;
+			break;
+		case Solver::operation::minus:
+			term -= value;
+			break;
+		case Solver::operation::mult:
+			term *= value;
+			break;
+		case Solver::operation::div:
+			term /= value;
+			break;
+		default:
+			break;
+		}
+		++eq_terms_it;
+	}
+	return term;
+}
+
+adept::adouble Solver::make_fv_equation(const string& eq_name, const vector<adept::adouble>& field_var, const adept::adouble* cons_var)
+{
+	auto& eq_terms = fv_equation.at(eq_name);
+	operation op = eq_terms[0].op;
+	string var_name_ = eq_terms[0].name;
+	auto get_value = [this, field_var, cons_var](const string& var_name_) -> adept::adouble
+	{
+		if (var_name_ == "A")
+			return 1.;
+		if (var_name_ == "GAMMAM")
+			return gamma - 1.;
+		if (var_name_ == "GAMMA")
+			return gamma;
+		if (vars.find(var_name_) != vars.end())
+			return cons_var[vars[var_name_]];
+		else
+			return field_var[vars_o[var_name_]];
+	};
+	adept::adouble value = get_value(var_name_);
+	double degree = eq_terms[0].degree;
+	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+	double coef = eq_terms[0].coef;
+	adept::adouble term = (op == operation::plus ? coef : -coef) * value;
 	auto eq_terms_it = eq_terms.begin();
 	++eq_terms_it;
 	while (eq_terms_it != eq_terms.end())
