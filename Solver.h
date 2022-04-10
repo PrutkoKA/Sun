@@ -323,7 +323,6 @@ public:
 	void RhoUPH(vector < vector < double > > & cv_, vector < vector < double > > & fv_);
 	void TimeSteps(bool local_time = true, double dt_ = 0.);
 	double SpectralRadius(vector< vector < double > >& cv_, int i);
-	void SourceTerm();
 	void SourceTerm(int i);
 	void ImplResidualSmooth();
 	void ImplResidualSmooth(vector < vector < vector < double > > >& rhs);

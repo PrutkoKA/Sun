@@ -78,51 +78,29 @@ Solver::Solver(sol_struct& sol_init_) :
 
 	RK_stages_num = RK_stage_coeffs.size();
 
-	SetEquation("mass", c_var_name[RHO_A], var_name[RHO] + var_name[U] + "A", vars, vars_o);	// RhoA, RhoUA
-	SetEquation("impulse", c_var_name[RHO_U_A], "(" + var_name[RHO] + var_name[U] + var_name[U] + op_name[operation::plus] + var_name[P] + ")A", vars, vars_o);		// RhoUA, (RhoUU+p)A
-	//SetEquation("energy", c_var_name[RHO_E_A], "(" + var_name[RHO] + var_name[H] + var_name[U] /*+ op_name[operation::plus] + var_name[P] + var_name[U]*/ + ")A", vars, vars_o);		// RhoEA, RhoHUA
-	SetEquation("energy", c_var_name[RHO_E_A], "(" + var_name[RHO] + var_name[E] + var_name[U] + op_name[operation::plus] + var_name[P] + var_name[U] + ")A", vars, vars_o);		// RhoEA, RhoHUA
+	SetEquation("mass", "RhoA", "RhoUA", vars, vars_o);	// RhoA, RhoUA
+	SetEquation("impulse", "RhoUA", "(RhoUU+p)A", vars, vars_o);		// RhoUA, (RhoUU+p)A
+	SetEquation("energy", "RhoEA", "(RhoEU+pU)A", vars, vars_o);		// RhoEA, (RhoEU+pU)A
 
 	set_fv_equation(		// Rho = RhoA / A
-		var_name[RHO],
-			{	c_var_name[RHO_A], 
-				op_name[operation::div] + 
-				"A", ""}		// There is dummy for unambiguous conservation
+		"Rho",
+		{ "RhoA", "/A", "" }		// There is dummy for unambiguous conservation
 	);
 	set_fv_equation(		// E = RhoEA / RhoA
-		var_name[E],
-		{ c_var_name[RHO_E_A],
-			op_name[operation::div] +
-			c_var_name[RHO_A], "" }		// There is dummy for unambiguous conservation
+		"E",
+		{ "RhoEA", "/RhoA", "" }		// There is dummy for unambiguous conservation
 	);
 	set_fv_equation(		// U = RhoUA / RhoA
-		var_name[U],
-		{		c_var_name[RHO_U_A], 
-				op_name[operation::div] + 
-				c_var_name[RHO_A], ""}
+		"U",
+		{ "RhoUA", "/RhoA", "" }
 	);
-	set_fv_equation(
-		var_name[P],		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
-		{		c_var_name[RHO_E_A], 
-				op_name[operation::div] + 
-				c_var_name[RHO_A], 
-				op_name[operation::minus] + 
-				"0.5" + var_name[U] + "^2", 
-				op_name[operation::mult] + 
-				"GAMMAM", 
-				op_name[operation::mult] + 
-				var_name[RHO], ""}
+	set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
+		"p",
+		{ "RhoEA", "/RhoA", "-0.5U^2", "*GAMMAM", "*Rho" }
 	);
 	set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
-		var_name[H],
-		{		"GAMMA", 
-				op_name[operation::div] + 
-				"GAMMAM", 
-				op_name[operation::mult] + 
-				var_name[P], 
-				op_name[operation::div] + 
-				var_name[RHO], op_name[operation::plus] +
-				"0.5" + var_name[U] + "^2" }
+		"H",
+		{ "GAMMA", "/GAMMAM", "*p", "/Rho", "+0.5U^2" }
 	);
 }
 
@@ -1763,31 +1741,10 @@ double Solver::SpectralRadius(vector< vector < double > >& cv_, int i)
 	return (cs  + abs(u)) * a[i];
 }
 
-void Solver::SourceTerm()
-{
-	double da;
-
-	for (int i = 1; i < ib2; ++i)
-	{
-		da = 0.5 * (a[i + 1] - a[i - 1]);
-		rhs[RHO_U_A][i] = rhs[RHO_U_A][i] - p[i] * da;
-	}
-}
-
 void Solver::SourceTerm(int i)
 {
-	double da;
-
-	//for (int i = 1; i < ib2; ++i)
-	//{
-
-	//da = ((a[i + 1] - a[max(i, 0)]) * (x[i] - x[max(i - 1, 0)] + 1e-20)
-	//	+ (a[i] - a[max(i - 1, 0)]) * (x[i + 1] - x[max(i, 0)] + 1e-20))
-	//	/ ((x[i + 1] - x[max(i - 1, 0)]) + 1e-20);
-
-		da = 0.5 * (a[i + 1] - a[i - 1]);
-		rhs[RHO_U_A][i] = rhs[RHO_U_A][i] - p[i] * da;
-	//}
+	double da = 0.5 * (a[i + 1] - a[i - 1]);
+	rhs[RHO_U_A][i] = rhs[RHO_U_A][i] - p[i] * da;
 }
 
 void Solver::ImplResidualSmooth()

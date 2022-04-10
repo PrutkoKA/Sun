@@ -171,35 +171,21 @@ void HLLE::ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adou
 
 	da = 0.5 * (a[i + 1] - a[max(i - 1, 0)]);
 	dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
-	//double da_dx = ((a[i + 1] - a[max(i, 0)]) / (x[i + 1] - x[max(i, 0)] + 1e-20) * (x[i] - x[max(i - 1, 0)] + 1e-20)
-	//			  + (a[i] - a[max(i - 1, 0)]) / (x[i] - x[max(i - 1, 0)] + 1e-20) * (x[i + 1] - x[max(i, 0)] + 1e-20))
-	//		      / ((x[i + 1] - x[max(i - 1, 0)]) + 1e-20);
+
 	source[0] = 0.;
 	source[1] = p * da / dx;
-	//source[1] = p * da_dx;
 	source[2] = 0.;
-	//rhs[RHO_U_A][i] = rhs[RHO_U_A][i] - p[i] * da;
 }
 
 void HLLE::SetRHS()
 {
-	//double da;
-
 	// sum of fluxes = RHS
 	for (int i = 1; i < ib2; ++i)
 	{
-		//da = 0.5 * (a[i + 1] - a[i - 1]);
 		for (int eq = 0; eq < eq_num; ++eq) {
 			int dt_var = equations[eq].dt_var;
 
-			//if (dt_var != N_A) {
-				rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
-			/*}
-			else {
-				rhs[dt_var][i] = (dummy[eq * imax + i - 1] + dummy[eq * imax + i + 1] - 2. * dummy[eq * imax + i]);
-			}*/
-			/*if (dt_var == RHO_U_A)
-				rhs[dt_var][i] = rhs[dt_var][i] - p[i] * da;*/
+			rhs[dt_var][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 		}
 		SourceTerm(i);
 	}
