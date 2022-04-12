@@ -211,7 +211,7 @@ public:
 	void SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_);
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
-	adept::adouble make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars);
+	adept::adouble make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars, const vector<vector<adept::adouble>>& f_vars_side = vector<vector<adept::adouble>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>());
 	double make_fv_equation(const string& eq_name, const int point);
 	adept::adouble make_fv_equation(const string& eq_name, const vector<adept::adouble>& field_var, const adept::adouble* cons_var);
 
@@ -320,7 +320,7 @@ public:
 	//void FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s);
 	void FillJacobian(MatrixXd& M_SGS, vector < double >& jac, double s);
 
-	vector<adept::adouble> construct_side_flux_array(const vector<adept::adouble>& vars);
+	vector<adept::adouble> construct_side_flux_array(const vector<adept::adouble>& vars, const int i);
 
 	virtual void deactivate_adept_stack() = 0;
 

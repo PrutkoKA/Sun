@@ -10,8 +10,10 @@ TSRK: 5_5                   # Two Step Runge-Kutta Scheme (stage, order) 5_5, 8_
 
 max_iter_num: 100000
 tolerance: 1e-5
-time_treat: explicit        # implicit, explicit
+time_treat: implicit        # implicit, explicit
 steadiness: steady
+
+remesh: false
 
 time_stepping: dual_time_stepping       # dual_time_stepping, two_step_RK
 

@@ -79,7 +79,7 @@ Solver::Solver(sol_struct& sol_init_) :
 	RK_stages_num = RK_stage_coeffs.size();
 
 	SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, vars, vars_o);	// RhoA, RhoUA
-	SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p" }, vars, vars_o);		// RhoUA, (RhoUU+p)A
+	SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p", "*dA" }, vars, vars_o);		// RhoUA, (RhoUU+p)A
 	SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "*A" }, { "" }, vars, vars_o);		// RhoEA, (RhoEU+pU)A
 
 	set_fv_equation(		// Rho = RhoA / A
@@ -150,25 +150,43 @@ pair<string, vector<eq_term>> Solver::equation::get_equation(const string& eq_na
 	return pair<string, vector<eq_term>>(eq_name, eq_terms);
 }
 
-adept::adouble Solver::make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars)
+adept::adouble Solver::make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars, const vector<vector<adept::adouble>>& f_vars_side, const vector<vector<double>>& x_and_as)
 {
-	vector<eq_term> &eq_terms = term_name == equation::term_name::dt ? equations[eq].cur_dt.second :
+	const vector<eq_term> &eq_terms = term_name == equation::term_name::dt ? equations[eq].cur_dt.second :
 								term_name == equation::term_name::dx ? equations[eq].cur_dx.second :
 																	   equations[eq].cur_source.second;
 
+	if (eq_terms.empty())
+		return 0.;
+
 	operation op = eq_terms[0].op;
-	string &var_name_ = eq_terms[0].name;
-	auto get_value = [this, f_vars](const string& var_name_) -> adept::adouble
+	string var_name_ = eq_terms[0].name;
+	bool differential = var_name_[0] == 'd';
+	double alpha1 = 0.;
+	double alpha2 = 0.;
+	if (differential)
+		var_name_.erase(var_name_.begin());
+
+	if (!x_and_as.empty())
+	{
+		alpha1 = (x_and_as[0][2] - x_and_as[0][1]) / (x_and_as[0][2] - x_and_as[0][0] + 1e-20);
+		alpha2 = (x_and_as[0][1] - x_and_as[0][0]) / (x_and_as[0][2] - x_and_as[0][0] + 1e-20);
+	}
+
+	auto get_value = [this, f_vars, f_vars_side, x_and_as, alpha1, alpha2](const string& var_name_, bool differential = false) -> adept::adouble
 	{
 		if (var_name_ == "A")
-			return 1.;
+			return !differential ? 1. : (x_and_as[1][1] - x_and_as[1][0]) * alpha1 +
+			                            (x_and_as[1][2] - x_and_as[1][1]) * alpha2;
 		if (var_name_ == "GAMMAM")
 			return gamma - 1.;
 		if (var_name_ == "GAMMA")
 			return gamma;
-		return f_vars[vars_o[var_name_]];
+		return !differential ? f_vars[vars_o[var_name_]] : (f_vars[vars_o[var_name_]] - f_vars_side[0][vars_o[var_name_]]) * alpha1 + 
+														   (f_vars_side[1][vars_o[var_name_]] - f_vars[vars_o[var_name_]]) * alpha2;
 	};
-	adept::adouble value = get_value(var_name_);
+
+	adept::adouble value = get_value(var_name_, differential);
 	double degree = eq_terms[0].degree;
 	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
 	double coef = eq_terms[0].coef;
@@ -178,8 +196,12 @@ adept::adouble Solver::make_equation(const int eq, const equation::term_name ter
 	while (eq_terms_it != eq_terms.end())
 	{
 		op = (*eq_terms_it).op;
-		string& var_name_ = (*eq_terms_it).name;
-		value = get_value(var_name_);
+		string var_name_ = (*eq_terms_it).name;
+		bool differential = var_name_[0] == 'd';
+		if (differential)
+			var_name_.erase(var_name_.begin());
+
+		value = get_value(var_name_, differential);
 		degree = (*eq_terms_it).degree;
 		coef = (*eq_terms_it).coef;
 		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
@@ -2102,7 +2124,6 @@ eq_term::eq_term(const string& term_s)
 	if (deg_pos != string::npos)
 	{
 		if (!sscanf(term_s.c_str() + deg_pos + 1, "%le", &degree))
-
 			degree = 1.;
 	}
 	else
@@ -2282,14 +2303,27 @@ int count_(vector < int >& vec, int val)
 	return count(vec.begin(), vec.end(), val);
 }
 
-vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::adouble>& vars)
+vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::adouble>& vars, const int i)
 {
+	vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
+	vector<vector<double>> x_and_as(2, vector<double>(3));
+	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	{
+		fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
+		fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
+	}
+	for (int i_ = i - 1; i_ <= i + 1; ++i_)
+	{
+		x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
+		x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
+	}
+
 	vector<adept::adouble> flux(eq_num);
 	unsigned int eq = 0;
 	for (const auto &equation : equations)
 	{
 		adept::adouble term = 1.;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars) * term;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars, fv_side, x_and_as) * term;
 		++eq;
 	}
 	return flux;

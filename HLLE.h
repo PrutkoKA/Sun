@@ -34,8 +34,8 @@ public:
 	{
 		stack.deactivate();
 	};
-	vector<adept::adouble> construct_hlle_flux_array(const vector<adept::adouble>& vars, const adept::adouble SLm, const adept::adouble SRp, const double direction);
-	vector<adept::adouble> construct_hllc_flux_array(const vector<adept::adouble>& vars, const adept::adouble SLm, const adept::adouble SRp, const adept::adouble S_star, const double direction);
+	vector<adept::adouble> construct_hlle_flux_array(const vector<adept::adouble>& vars, const adept::adouble SLm, const adept::adouble SRp, const double direction, const int i);
+	vector<adept::adouble> construct_hllc_flux_array(const vector<adept::adouble>& vars, const adept::adouble SLm, const adept::adouble SRp, const adept::adouble S_star, const double direction, const int i);
 
 
 private:
