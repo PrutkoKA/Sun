@@ -96,13 +96,14 @@ class Solver
 {
 public:
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}/*, {"C2", 5}*//*, {"n", 4}*/};
+	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}, {"dA", 5}/*, {"C2", 5}*//*, {"n", 4}*/ };
 	enum Vars_o {
 		RHO,
 		U,
 		P,
 		E,
 		H,
+		DA,
 		FIELD_VAR_COUNT
 	};
 
@@ -111,7 +112,8 @@ public:
 		{U, "U"},
 		{P, "p"},
 		{E, "E"},
-		{H, "H"}
+		{H, "H"},
+		{DA, "dA"}
 	};
 
 	enum Vars {
@@ -223,7 +225,8 @@ public:
 	void SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_);
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
-	adept::adouble make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars, const vector<vector<adept::adouble>>& f_vars_side = vector<vector<adept::adouble>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>());
+	template<typename T>
+	T make_equation(const int eq, const equation::term_name term_name, const vector<T>& f_vars, const vector<vector<T>>& f_vars_side = vector<vector<T>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>());
 	template<typename T>
 	T make_fv_equation(const string& eq_name, const int point, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
 

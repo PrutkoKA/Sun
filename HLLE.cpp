@@ -184,7 +184,7 @@ void HLLE::ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adou
 	//dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
 
 	for (int eq = 0; eq < eq_num; ++eq)
-		source[eq] = make_equation(eq, Solver::equation::term_name::source, fv_a/*, fv_side, x_and_as*/) * da /*/ dx*/;
+		source[eq] = make_equation<adouble>(eq, Solver::equation::term_name::source, fv_a/*, fv_side, x_and_as*/) * da /*/ dx*/;
 }
 
 void HLLE::SetRHS()
@@ -212,26 +212,34 @@ void HLLE::SetRHS()
 		//double dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
 		for (int eq = 0; eq < eq_num; ++eq) {
 			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
-			rhs[eq][i] += make_equation(eq, Solver::equation::term_name::source, fv_a/*, fv_side, x_and_as*/).value() * da /*/ dx*/;
+			rhs[eq][i] += make_equation<adept::adouble>(eq, Solver::equation::term_name::source, fv_a/*, fv_side, x_and_as*/).value() * da /*/ dx*/;
 		}
 	}
 }
 
 void HLLE::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
 {
-	vector < double > x_val(eq_num);
+	vector < double > x_val(eq_num * 3);	// 2 additional for gradient calculation
 	double gamma_ = GetGamma();
 
-	x_val[RHO_A] = ls[RHO][i];
-	x_val[RHO_U_A] = ls[RHO][i] * ls[U][i];
-	x_val[RHO_E_A] = (ls[P][i] / (gamma_ - 1.) + 0.5 * ls[RHO][i] * pow(ls[U][i], 2));
-	//x_val[N_A] = ls[n][i];
-	//adept::Stack stack;
+	vector<vector<double>> ls_vec(3, vector<double>(var_num));
+	for (int var = 0; var < var_num * 3; ++var)
+	{
+		int id = (var / var_num);
+		if (id > 0)
+			id = pow(-1, id);
+		id = max(0, i + id);
+		ls_vec[var / var_num][var % var_num] = ls[var % var_num][id];
+	}
+
+	for (int eq = 0; eq < eq_num * 3; ++eq)
+		x_val[eq] = make_equation<double>(eq % eq_num, Solver::equation::term_name::dt, ls_vec[eq / eq_num]);
+
 	vector<adept::adouble> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
 	vector<adept::adouble> y(eq_num);
-	ComputePositiveFlux(eq_num, &x[0], eq_num, &y[0], i);
+	ComputePositiveFlux(&x[0], &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
 		stack.dependent(&y[0], eq_num);
@@ -243,19 +251,27 @@ void HLLE::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < 
 
 void HLLE::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
 {
-	vector < double > x_val(eq_num);
+	vector < double > x_val(eq_num * 3);	// 2 additional for gradient calculation
 	double gamma_ = GetGamma();
 
-	x_val[RHO_A] = rs[RHO][i];
-	x_val[RHO_U_A] = rs[RHO][i] * rs[U][i];
-	x_val[RHO_E_A] = (rs[P][i] / (gamma_ - 1.) + 0.5 * rs[RHO][i] * pow(rs[U][i], 2));
-	//x_val[N_A] = rs[n][i];
-	//adept::Stack stack;
+	vector<vector<double>> rs_vec(3, vector<double>(var_num));
+	for (int var = 0; var < var_num * 3; ++var)
+	{
+		int id = (var / var_num);
+		if (id > 0)
+			id = pow(-1, id);
+		id = max(0, i + id);
+		rs_vec[var / var_num][var % var_num] = rs[var % var_num][id];
+	}
+
+	for (int eq = 0; eq < eq_num; ++eq)
+		x_val[eq] = make_equation<double>(eq % eq_num, Solver::equation::term_name::dt, rs_vec[eq / eq_num]);
+
 	vector<adept::adouble> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
 	vector<adept::adouble> y(eq_num);
-	ComputeNegativeFlux(eq_num, &x[0], eq_num, &y[0], i);
+	ComputeNegativeFlux(&x[0], &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
 		stack.dependent(&y[0], eq_num);
@@ -265,7 +281,7 @@ void HLLE::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < 
 		y_val[iy] = y[iy].value();
 }
 
-void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* fcav, int i, int direction)
+void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, int direction)
 {
 	using adept::adouble;
 	bool contact = solver_name == "hllc";
@@ -436,14 +452,14 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	}
 }
 
-void HLLE::ComputePositiveFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i)
+void HLLE::ComputePositiveFlux(const adept::adouble* x, adept::adouble* fcavp, int i)
 {
-	ComputeFlux(n, x, m, fcavp, i, 1);
+	ComputeFlux(x, fcavp, i, 1);
 }
 
-void HLLE::ComputeNegativeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavn, int i)
+void HLLE::ComputeNegativeFlux(const adept::adouble* x, adept::adouble* fcavn, int i)
 {
-	ComputeFlux(n, x, m, fcavn, i, -1);
+	ComputeFlux(x, fcavn, i, -1);
 }
 
 void HLLE::SetFluxes(int i, vector < double >& fluxp, vector < double >& fluxn)
@@ -491,9 +507,9 @@ vector<adept::adouble> HLLE::construct_hlle_flux_array(const vector<adept::adoub
 	for (const auto& equation : equations)
 	{
 		adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
 		term = -SRp * SLm * direction;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
 		flux[eq] /= (SRp - SLm);
 		++eq;
 	}
@@ -524,9 +540,9 @@ vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adoub
 	for (const auto& equation : equations)
 	{
 		adept::adouble term = (direction > 0. ? SLm : SRp);
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
 		term = -1.;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
 		flux[eq] *= S_star;
 		flux[eq] += p_star * D_star[eq];
 		

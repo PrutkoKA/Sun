@@ -43,7 +43,10 @@ Solver::Solver(sol_struct& sol_init_) :
 					solver_name(sol_init_.solver_name)
 {
 	if (false)
+	{
 		make_fv_equation<adept::adouble>(var_name[0], 0);	// To resolve adouble template in HLLE. Whaaat?? It even may be not executed.
+		make_equation(RHO_A, Solver::equation::term_name::dt, vector<double>());
+	}
 
 	eq_num = vars.size();
 	var_num = vars_o.size();
@@ -105,6 +108,10 @@ Solver::Solver(sol_struct& sol_init_) :
 		"H",
 		{ "GAMMA", "/GAMMAM", "*p", "/Rho", "+0.5U^2" }
 	);
+	set_fv_equation(		// dA
+		"dA",
+		{ "A" }
+	);
 }
 
 void Solver::SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_)
@@ -153,7 +160,8 @@ pair<string, vector<eq_term>> Solver::equation::get_equation(const string& eq_na
 	return pair<string, vector<eq_term>>(eq_name, eq_terms);
 }
 
-adept::adouble Solver::make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars, const vector<vector<adept::adouble>>& f_vars_side, const vector<vector<double>>& x_and_as)
+template<typename T>
+T Solver::make_equation(const int eq, const equation::term_name term_name, const vector<T>& f_vars, const vector<vector<T>>& f_vars_side, const vector<vector<double>>& x_and_as)
 {
 	const vector<eq_term> &eq_terms = term_name == equation::term_name::dt ? equations[eq].cur_dt.second :
 								term_name == equation::term_name::dx ? equations[eq].cur_dx.second :
@@ -176,7 +184,7 @@ adept::adouble Solver::make_equation(const int eq, const equation::term_name ter
 		alpha2 = (x_and_as[0][1] - x_and_as[0][0]) / (x_and_as[0][2] - x_and_as[0][0] + 1e-20);
 	}
 
-	auto get_value = [this, f_vars, f_vars_side, x_and_as, alpha1, alpha2](const string& var_name_, bool differential = false) -> adept::adouble
+	auto get_value = [this, f_vars, f_vars_side, x_and_as, alpha1, alpha2](const string& var_name_, bool differential = false) -> T
 	{
 		if (var_name_ == "A")
 			return !differential ? 1. : (x_and_as[1][1] - x_and_as[1][0]) * alpha1 +
@@ -189,11 +197,11 @@ adept::adouble Solver::make_equation(const int eq, const equation::term_name ter
 														   (f_vars_side[1][vars_o[var_name_]] - f_vars[vars_o[var_name_]]) * alpha2;
 	};
 
-	adept::adouble value = get_value(var_name_, differential);
+	T value = get_value(var_name_, differential);
 	double degree = eq_terms[0].degree;
 	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
 	double coef = eq_terms[0].coef;
-	adept::adouble term = (op == operation::plus ? coef : -coef) * value;
+	T term = (op == operation::plus ? coef : -coef) * value;
 	auto eq_terms_it = eq_terms.begin();
 	++eq_terms_it;
 	while (eq_terms_it != eq_terms.end())
@@ -2331,7 +2339,7 @@ vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::ado
 	for (const auto &equation : equations)
 	{
 		adept::adouble term = 1.;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
 		++eq;
 	}
 	return flux;
