@@ -96,13 +96,14 @@ class Solver
 {
 public:
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}, {"dA", 5}/*, {"C2", 5}*//*, {"n", 4}*/ };
+	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}, {"A", 5}, {"dA", 6}/*, {"C2", 5}*//*, {"n", 4}*/ };
 	enum Vars_o {
 		RHO,
 		U,
 		P,
 		E,
 		H,
+		A,
 		DA,
 		FIELD_VAR_COUNT
 	};
@@ -113,6 +114,7 @@ public:
 		{P, "p"},
 		{E, "E"},
 		{H, "H"},
+		{A, "A"},
 		{DA, "dA"}
 	};
 
@@ -226,9 +228,13 @@ public:
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	template<typename T>
-	T make_equation(const int eq, const equation::term_name term_name, const vector<T>& f_vars, const vector<vector<T>>& f_vars_side = vector<vector<T>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>());
+	T make_equation(const int eq, const equation::term_name term_name, const vector<T>& f_vars/*, const vector<vector<T>>& f_vars_side = vector<vector<T>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>()*/);
 	template<typename T>
 	T make_fv_equation(const string& eq_name, const int point, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
+	void fill_fv_equations(vector<adept::adouble>& fv_a, int i, const adept::adouble* x_);
+	void fill_fv_equations(vector<vector<double>>& fv_a, int i);
+	void fill_fv_equations(vector<adept::adouble>& fv, int i);
+	void fill_fv_equations(vector<double>& fv, int i, bool compute_differential = true);
 
 	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
 
@@ -379,9 +385,9 @@ private:
 	vector < vector < double > > alpha;
 
 	template<typename T>
-	T get_var_value(const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
+	T get_var_value(const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr, bool differential = false);
 	template<typename T>
-	T calculate_term_value(eq_term& term, int point, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
+	T calculate_term_value(eq_term& term, int point, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr, bool differential = false);
 };
 
 Solver* CreateReadConfigFile(string file_name);

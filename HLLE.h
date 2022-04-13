@@ -26,7 +26,7 @@ public:
 	void ComputeFlux(const adept::adouble* x, adept::adouble* fcav, int i, int direction = 0);
 	void SetFluxes(int i, vector < double >& fluxp, vector < double >& fluxn);
 	void GetSourceAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
-	void ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adouble* source, int i);
+	void ComputeSourceTerm(const adept::adouble* cv, adept::adouble* source, int i);
 	void SetRHS();
 
 	virtual void GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple = false);
