@@ -161,58 +161,58 @@ void HLLE::ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adou
 {
 	using adept::adouble;
 	vector<adouble> fv_a(var_num);
-	vector<vector<adouble>> fv_side(2, vector<adouble> (var_num));
-	vector<vector<double>> x_and_as(2, vector<double> (3));
-	//double da, dx;
+	//vector<vector<adouble>> fv_side(2, vector<adouble> (var_num));
+	//vector<vector<double>> x_and_as(2, vector<double> (3));
+	double da, dx;
 	double gamma_ = GetGamma();
 
 	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		fv_a[var] = make_fv_equation(var_name[var], fv_a, cv);
-		fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-		fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	}
-	for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	{
-		x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-		x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	}
+	//{
+		fv_a[var] = make_fv_equation<adouble>(var_name[var], -1, fv_a, cv);
+	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
+	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
+	//}
+	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
+	//{
+	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
+	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
+	//}
 	/*x_and_as[0][1] = x[i];
 	x_and_as[0][2] = x[i + 1];*/
 
-	//da = 0.5 * (a[i + 1] - a[max(i - 1, 0)]);
+	da = 0.5 * (a[i + 1] - a[max(i - 1, 0)]);
 	//dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
 
 	for (int eq = 0; eq < eq_num; ++eq)
-		source[eq] = make_equation(eq, Solver::equation::term_name::source, fv_a, fv_side, x_and_as) /** da*/ /*/ dx*/;
+		source[eq] = make_equation(eq, Solver::equation::term_name::source, fv_a/*, fv_side, x_and_as*/) * da /*/ dx*/;
 }
 
 void HLLE::SetRHS()
 {
 	// sum of fluxes = RHS
 	vector<adept::adouble> fv_a(var_num);
-	vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	vector<vector<double>> x_and_as(2, vector<double>(3));
+	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
+	//vector<vector<double>> x_and_as(2, vector<double>(3));
 
 	for (int i = 1; i < ib2; ++i)
 	{
 		for (int var = 0; var < FIELD_VAR_COUNT; ++var)
 		{
-			fv_a[var] = make_fv_equation(var_name[var], i);
-			fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-			fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
+			fv_a[var] = make_fv_equation<double>(var_name[var], i);
+			//fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
+			//fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
 		}
-		for (int i_ = i - 1; i_ <= i + 1; ++i_)
-		{
-			x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-			x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-		}
+		//for (int i_ = i - 1; i_ <= i + 1; ++i_)
+		//{
+		//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
+		//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
+		//}
 
-		//double da = 0.5 * (a[i + 1] - a[i - 1]);
+		double da = 0.5 * (a[i + 1] - a[i - 1]);
 		//double dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
 		for (int eq = 0; eq < eq_num; ++eq) {
 			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
-			rhs[eq][i] += make_equation(eq, Solver::equation::term_name::source, fv_a, fv_side, x_and_as).value()/* * da*/ /*/ dx*/;
+			rhs[eq][i] += make_equation(eq, Solver::equation::term_name::source, fv_a/*, fv_side, x_and_as*/).value() * da /*/ dx*/;
 		}
 	}
 }
@@ -269,24 +269,24 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 {
 	using adept::adouble;
 	bool contact = solver_name == "hllc";
-
-	adouble c_l, c_r;
-	vector<adouble> fv_a(var_num), fv_o(var_num);
-	adouble RT, uh, Hh, ch, SLm, SRp;
+	
 	double gamma_ = GetGamma();
 	double sign_(Sign(direction));
-
 	bool use_WAF = false && i != 0 && i != ib2 - 1;
-	vector<adept::adouble> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
 
+	vector<adouble> fv_a(var_num);
 	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		fv_a[var] = make_fv_equation(var_name[var], fv_a, x_);
-		fv_o[var] = (direction > 0 ? rs[var][i] : ls[var][i]);
-	}
+		fv_a[var] = make_fv_equation<adouble>(var_name[var], -1, fv_a, x_);
 
-	auto& fv_r = direction > 0 ? fv_o : fv_a;
-	auto& fv_l = direction < 0 ? fv_o : fv_a;
+	vector<adouble> fv_o(var_num);
+	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+		fv_o[var] = (direction > 0 ? rs[var][i] : ls[var][i]);
+
+	adouble c_l, c_r;
+	adouble RT, uh, Hh, ch, SLm, SRp;
+
+	vector<adouble>& fv_r = direction > 0 ? fv_o : fv_a;
+	vector<adouble>& fv_l = direction < 0 ? fv_o : fv_a;
 
 	c_l = sqrt(gamma_ * fv_l[P] / fv_l[RHO]);
 	c_r = sqrt(gamma_ * fv_r[P] / fv_r[RHO]);
@@ -300,6 +300,7 @@ void HLLE::ComputeFlux(int n, const adept::adouble* x_, int m, adept::adouble* f
 	SRp = adept::max(fv_r[U] + c_r, uh + ch);
 
 	adouble S_star = (fv_r[P] - fv_l[P] + fv_l[RHO] * fv_l[U] * (SLm - fv_l[U]) - fv_r[RHO] * fv_r[U] * (SRp - fv_r[U])) / (fv_l[RHO] * (SLm - fv_l[U]) - fv_r[RHO] * (SRp - fv_r[U]));
+	vector<adept::adouble> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
 
 	//			FL case								FR case
 	if ( (SLm >= 0. && direction > 0.) || (SRp <= 0. && direction < 0.) || use_WAF) {
@@ -474,25 +475,25 @@ vector<adept::adouble> HLLE::construct_hlle_flux_array(const vector<adept::adoub
 	vector<adept::adouble> flux(eq_num);
 	unsigned int eq = 0;
 
-	vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	vector<vector<double>> x_and_as(2, vector<double>(3));
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-		fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	}
-	for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	{
-		x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-		x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	}
+	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
+	//vector<vector<double>> x_and_as(2, vector<double>(3));
+	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	//{
+	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
+	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
+	//}
+	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
+	//{
+	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
+	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
+	//}
 
 	for (const auto& equation : equations)
 	{
 		adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars, fv_side, x_and_as) * term;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
 		term = -SRp * SLm * direction;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars, fv_side, x_and_as) * term;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
 		flux[eq] /= (SRp - SLm);
 		++eq;
 	}
@@ -506,26 +507,26 @@ vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adoub
 	adept::adouble S_K = (direction > 0. ? SLm : SRp);
 	adept::adouble p_star = S_K * (vars[P] + vars[RHO] * (S_K - vars[U]) * (S_star - vars[U]));
 
-	vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	vector<vector<double>> x_and_as(2, vector<double>(3));
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-		fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	}
-	for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	{
-		x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-		x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	}
+	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
+	//vector<vector<double>> x_and_as(2, vector<double>(3));
+	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	//{
+	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
+	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
+	//}
+	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
+	//{
+	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
+	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
+	//}
 
 	unsigned int eq = 0;
 	for (const auto& equation : equations)
 	{
 		adept::adouble term = (direction > 0. ? SLm : SRp);
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars, fv_side, x_and_as) * term;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
 		term = -1.;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars, fv_side, x_and_as) * term;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
 		flux[eq] *= S_star;
 		flux[eq] += p_star * D_star[eq];
 		

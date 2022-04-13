@@ -42,6 +42,9 @@ Solver::Solver(sol_struct& sol_init_) :
 					time_stepping(sol_init_.time_stepping),
 					solver_name(sol_init_.solver_name)
 {
+	if (false)
+		make_fv_equation<adept::adouble>(var_name[0], 0);	// To resolve adouble template in HLLE. Whaaat?? It even may be not executed.
+
 	eq_num = vars.size();
 	var_num = vars_o.size();
 	iter = 0;
@@ -79,7 +82,7 @@ Solver::Solver(sol_struct& sol_init_) :
 	RK_stages_num = RK_stage_coeffs.size();
 
 	SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, vars, vars_o);	// RhoA, RhoUA
-	SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p", "*dA" }, vars, vars_o);		// RhoUA, (RhoUU+p)A
+	SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p"/*, "*dA"*/ }, vars, vars_o);		// RhoUA, (RhoUU+p)A
 	SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "*A" }, { "" }, vars, vars_o);		// RhoEA, (RhoEU+pU)A
 
 	set_fv_equation(		// Rho = RhoA / A
@@ -227,94 +230,99 @@ adept::adouble Solver::make_equation(const int eq, const equation::term_name ter
 	return term;
 }
 
-double Solver::make_fv_equation(const string& eq_name, const int point)
+template<typename T>
+T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T>& field_var, const T* cons_var)
 {
-	auto& eq_terms = fv_equation.at(eq_name);
-	operation op = eq_terms[0].op;
-	string &var_name_ = eq_terms[0].name;
-	auto get_value = [this, point](const string& var_name_) -> double 
+	bool arrays_are_provided = cons_var;
+	if (v_type == eq_term::var_type::not_defined)
 	{
 		if (var_name_ == "A")
-			return a[point];
-		if (var_name_ == "GAMMAM")
-			return gamma - 1.;
-		if (var_name_ == "GAMMA")
-			return gamma;
-		if (vars.find(var_name_) != vars.end())
-			return cv[vars[var_name_]][point];
-		else
-			return fv[vars_o[var_name_]][point];
-	};
-	double value = get_value(var_name_);
-	double degree = eq_terms[0].degree;
-	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
-	double coef = eq_terms[0].coef;
-	double term = (op == operation::plus ? coef : -coef) * value;
-	auto eq_terms_it = eq_terms.begin();
-	++eq_terms_it;
-	while (eq_terms_it != eq_terms.end())
-	{
-		op = (*eq_terms_it).op;
-		string& var_name_ = (*eq_terms_it).name;
-		value = get_value(var_name_);
-		degree = (*eq_terms_it).degree;
-		coef = (*eq_terms_it).coef;
-		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
-		switch (op)
 		{
-		case operation::plus:
-			term += value;
-			break;
-		case operation::minus:
-			term -= value;
-			break;
-		case operation::mult:
-			term *= value;
-			break;
-		case operation::div:
-			term /= value;
-			break;
-		default:
-			break;
+			v_type = eq_term::var_type::area;
+			return arrays_are_provided ? 1. : a[point];
 		}
-		++eq_terms_it;
+		if (var_name_ == "GAMMAM")
+		{
+			v_type = eq_term::var_type::gammam;
+			return gamma - 1.;
+		}
+		if (var_name_ == "GAMMA")
+		{
+			v_type = eq_term::var_type::gamma;
+			return gamma;
+		}
+		if (vars.find(var_name_) != vars.end())
+		{
+			v_type = eq_term::var_type::conservative;
+			v_id = vars[var_name_];
+			return arrays_are_provided ? cons_var[v_id] : cv[v_id][point];
+		}
+		else
+		{
+			v_type = eq_term::var_type::field;
+			v_id = vars_o[var_name_];
+			return arrays_are_provided ? field_var[v_id] : fv[v_id][point];
+		}
 	}
-	return term;
-}
+	else
+	{
+		switch (v_type)
+		{
+		case eq_term::var_type::area:
+			return arrays_are_provided ? 1. : a[point];
+		case eq_term::var_type::gammam:
+			return gamma - 1.;
+		case eq_term::var_type::gamma:
+			return gamma;
+		case eq_term::var_type::conservative:
+		{
+			if (v_id == -1)
+				cout << "The end" << endl;
+			return arrays_are_provided ? cons_var[v_id] : cv[v_id][point];
+		}
+		case eq_term::var_type::field:
+		{
+			if (v_id == -1)
+				cout << "The end" << endl;
+			return arrays_are_provided ? field_var[v_id] : fv[v_id][point];
+		}
+		}
+	}
+};
 
-adept::adouble Solver::make_fv_equation(const string& eq_name, const vector<adept::adouble>& field_var, const adept::adouble* cons_var)
+template<typename T>
+T Solver::calculate_term_value(eq_term& term, int point, const vector<T>& field_var, const T* cons_var)
 {
+	operation op = term.op;
+	string& var_name_ = term.name;
+	auto& v_type = term.v_type;
+	auto& v_id = term.var_id;
+	T value = get_var_value(var_name_, point, v_type, v_id, field_var, cons_var);
+
+	double degree = term.degree;
+	double coef = term.coef;
+	value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+	return value;
+};
+
+template<typename T>
+T Solver::make_fv_equation(const string& eq_name, const int point, const vector<T>& field_var, const T* cons_var)
+{
+	if (fv_equation.empty())
+		return 0.;
+
 	auto& eq_terms = fv_equation.at(eq_name);
 	operation op = eq_terms[0].op;
-	string& var_name_ = eq_terms[0].name;
-	auto get_value = [this, field_var, cons_var](const string& var_name_) -> adept::adouble
-	{
-		if (var_name_ == "A")
-			return 1.;
-		if (var_name_ == "GAMMAM")
-			return gamma - 1.;
-		if (var_name_ == "GAMMA")
-			return gamma;
-		if (vars.find(var_name_) != vars.end())
-			return cons_var[vars[var_name_]];
-		else
-			return field_var[vars_o[var_name_]];
-	};
-	adept::adouble value = get_value(var_name_);
-	double degree = eq_terms[0].degree;
-	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
-	double coef = eq_terms[0].coef;
-	adept::adouble term = (op == operation::plus ? coef : -coef) * value;
+	T term = calculate_term_value(eq_terms[0], point, field_var, cons_var);
+	if (op != operation::plus)
+		term = -term;
+
 	auto eq_terms_it = eq_terms.begin();
 	++eq_terms_it;
 	while (eq_terms_it != eq_terms.end())
 	{
 		op = (*eq_terms_it).op;
-		string& var_name_ = (*eq_terms_it).name;
-		value = get_value(var_name_);
-		degree = (*eq_terms_it).degree;
-		coef = (*eq_terms_it).coef;
-		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+		T value = calculate_term_value(*eq_terms_it, point, field_var, cons_var);
 		switch (op)
 		{
 		case operation::plus:
@@ -1764,7 +1772,7 @@ void Solver::RhoUPH()
 	}
 	for (int i = 0; i < imax; ++i)
 		for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-			fv[var][i] = make_fv_equation(var_name[var], i);
+			fv[var][i] = make_fv_equation<double>(var_name[var], i);
 }
 
 void Solver::RhoUPH(vector < vector < double > >& cv_, vector < vector < double > >& fv_)
@@ -1805,9 +1813,9 @@ void Solver::TimeSteps(bool local_time, double dt_)		// Blazek, Section 6.1.4, p
 	}
 	for (int i = 1; i < ib2; ++i)
 	{
-		rho = make_fv_equation(var_name[RHO], i);
-		u = make_fv_equation(var_name[U], i);
-		p = make_fv_equation(var_name[P], i);
+		rho = make_fv_equation<double>(var_name[RHO], i);
+		u = make_fv_equation<double>(var_name[U], i);
+		p = make_fv_equation<double>(var_name[P], i);
 		cs = sqrt(gamma * p / rho);
 		dx = 0.5 * (x[i + 1] - x[i - 1]);
 		sprad = cs * sqrt(dx * dx + pow(a[i], 2)) + abs(u) * a[i];
@@ -2305,25 +2313,25 @@ int count_(vector < int >& vec, int val)
 
 vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::adouble>& vars, const int i)
 {
-	vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	vector<vector<double>> x_and_as(2, vector<double>(3));
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-		fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	}
-	for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	{
-		x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-		x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	}
+	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
+	//vector<vector<double>> x_and_as(2, vector<double>(3));
+	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	//{
+	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
+	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
+	//}
+	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
+	//{
+	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
+	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
+	//}
 
 	vector<adept::adouble> flux(eq_num);
 	unsigned int eq = 0;
 	for (const auto &equation : equations)
 	{
 		adept::adouble term = 1.;
-		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars, fv_side, x_and_as) * term;
+		flux[eq] += make_equation(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
 		++eq;
 	}
 	return flux;

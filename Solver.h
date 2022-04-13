@@ -71,10 +71,22 @@ enum class operation
 
 struct eq_term
 {
+	enum class var_type
+	{
+		conservative,
+		field,
+		gamma,
+		gammam,
+		area,
+		not_defined
+	};
 	operation op;
 	string name;
 	double degree;
 	double coef;
+
+	var_type v_type = var_type::not_defined;
+	int var_id = -1;
 
 	eq_term(const operation op_, const string name_, const double degree_, const double coef_ = 1.) : op(op_), name(name_), degree(degree_), coef(coef_) {};
 	eq_term(const string& term_s);
@@ -212,8 +224,8 @@ public:
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	adept::adouble make_equation(const int eq, const equation::term_name term_name, const vector<adept::adouble>& f_vars, const vector<vector<adept::adouble>>& f_vars_side = vector<vector<adept::adouble>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>());
-	double make_fv_equation(const string& eq_name, const int point);
-	adept::adouble make_fv_equation(const string& eq_name, const vector<adept::adouble>& field_var, const adept::adouble* cons_var);
+	template<typename T>
+	T make_fv_equation(const string& eq_name, const int point, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
 
 	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
 
@@ -362,6 +374,11 @@ private:
 	vector < double > bk;
 	vector < double > ck;
 	vector < vector < double > > alpha;
+
+	template<typename T>
+	T get_var_value(const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
+	template<typename T>
+	T calculate_term_value(eq_term& term, int point, const vector<T>& field_var = vector<T>(), const T* cons_var = nullptr);
 };
 
 Solver* CreateReadConfigFile(string file_name);
