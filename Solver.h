@@ -389,13 +389,17 @@ private:
 	vector < vector < double > > alpha;
 
 	template<typename T>
-	T get_var_value(const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr, bool differential = false);
+	T make_equation_general(vector<eq_term>& eq_terms, int point, const vector<T*>& field_var, const T* cons_var);
 	template<typename T>
-	T calculate_term_value(eq_term& term, int point, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr, bool differential = false);
+	T get_var_value(const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr, bool fv_eq = true);
+	template<typename T>
+	T calculate_term_value(eq_term& term, int point, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr, bool fv_eq = true);
 	template<typename T>
 	void compute_differential_var(int i, const vector<int>& skipped, vector<T*>& fv);
 	template<typename T>
 	void fill_fv_underneath(int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential = true, const T* cons_var = nullptr);
+	template<typename T>
+	void apply_operation(T& term, operation& op, const T& value);
 };
 
 Solver* CreateReadConfigFile(string file_name);

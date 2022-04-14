@@ -169,69 +169,42 @@ pair<string, vector<eq_term>> Solver::equation::get_equation(const string& eq_na
 template<typename T>
 T Solver::make_equation(const int eq, const equation::term_name term_name, const vector<T*>& f_vars)
 {
-	const vector<eq_term> &eq_terms = term_name == equation::term_name::dt ? equations[eq].cur_dt.second :
-								      term_name == equation::term_name::dx ? equations[eq].cur_dx.second :
-																	         equations[eq].cur_source.second;
+	vector<eq_term> &eq_terms = term_name == equation::term_name::dt ? equations[eq].cur_dt.second :
+								term_name == equation::term_name::dx ? equations[eq].cur_dx.second :
+																	   equations[eq].cur_source.second;
 
 	if (eq_terms.empty())
 		return 0.;
 
-	operation op = eq_terms[0].op;
-	string var_name_ = eq_terms[0].name;
-
-	auto get_value = [this, f_vars](const string& var_name_) -> T
-	{
-		if (var_name_ == var_name[A])
-			return 1.;
-		if (var_name_ == "GAMMAM")
-			return gamma - 1.;
-		if (var_name_ == "GAMMA")
-			return gamma;
-		return *f_vars[vars_o[var_name_]];
-	};
-
-	T value = get_value(var_name_);
-	double degree = eq_terms[0].degree;
-	value = (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
-	double coef = eq_terms[0].coef;
-	T term = (op == operation::plus ? coef : -coef) * value;
-	auto eq_terms_it = eq_terms.begin();
-	++eq_terms_it;
-	while (eq_terms_it != eq_terms.end())
-	{
-		op = (*eq_terms_it).op;
-		string var_name_ = (*eq_terms_it).name;
-
-		value = get_value(var_name_);
-		degree = (*eq_terms_it).degree;
-		coef = (*eq_terms_it).coef;
-		value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
-		switch (op)
-		{
-		case operation::plus:
-			term += value;
-			break;
-		case operation::minus:
-			term -= value;
-			break;
-		case operation::mult:
-			term *= value;
-			break;
-		case operation::div:
-			term /= value;
-			break;
-		default:
-			break;
-		}
-		++eq_terms_it;
-	}
-	return term;
+	return make_equation_general<T>(eq_terms, -1, f_vars, nullptr); 	// fv anc cv will not be queried. Conservative variables will not be queried, but set, if it exists -> arrays are provided
 }
 
 template<typename T>
-T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T*>& field_var, const T* cons_var, bool differential)
+void Solver::apply_operation(T& term, operation& op, const T& value)
 {
-	bool arrays_are_provided = cons_var;
+	switch (op)
+	{
+	case operation::plus:
+		term += value;
+		break;
+	case operation::minus:
+		term -= value;
+		break;
+	case operation::mult:
+		term *= value;
+		break;
+	case operation::div:
+		term /= value;
+		break;
+	default:
+		break;
+	}
+}
+
+template<typename T>
+T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_type& v_type, int& v_id, const vector<T*>& field_var, const T* cons_var, bool fv_eq)
+{
+	bool arrays_are_provided = cons_var || !fv_eq;
 	if (v_type == eq_term::var_type::not_defined)
 	{
 		if (var_name_ == var_name[A])
@@ -288,13 +261,13 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 };
 
 template<typename T>
-T Solver::calculate_term_value(eq_term& term, int point, const vector<T*>& field_var, const T* cons_var, bool differential)
+T Solver::calculate_term_value(eq_term& term, int point, const vector<T*>& field_var, const T* cons_var, bool fv_eq)
 {
 	operation op = term.op;
 	string& var_name_ = term.name;
 	auto& v_type = term.v_type;
 	auto& v_id = term.var_id;
-	T value = get_var_value(var_name_, point, v_type, v_id, field_var, cons_var, differential);
+	T value = get_var_value(var_name_, point, v_type, v_id, field_var, cons_var, fv_eq);
 
 	double degree = term.degree;
 	double coef = term.coef;
@@ -309,9 +282,16 @@ T Solver::make_fv_equation(const string& eq_name, const int point, const vector<
 		return 0.;
 
 	auto& eq_terms = fv_equation.at(eq_name);
+	return make_equation_general<T>(eq_terms, point, field_var, cons_var);
+}
+
+template<typename T>
+T Solver::make_equation_general(vector<eq_term>& eq_terms, int point, const vector<T*>& field_var, const T* cons_var)
+{
+	bool fv_eq = point != -1;			// If point isn't -1 - then it is a field value equation, otherwise it is a conservative equation
 	operation op = eq_terms[0].op;
 
-	T term = calculate_term_value(eq_terms[0], point, field_var, cons_var);
+	T term = calculate_term_value<T>(eq_terms[0], point, field_var, cons_var, fv_eq);
 	if (op != operation::plus)
 		term = -term;
 
@@ -320,24 +300,8 @@ T Solver::make_fv_equation(const string& eq_name, const int point, const vector<
 	while (eq_terms_it != eq_terms.end())
 	{
 		op = (*eq_terms_it).op;
-		T value = calculate_term_value(*eq_terms_it, point, field_var, cons_var);
-		switch (op)
-		{
-		case operation::plus:
-			term += value;
-			break;
-		case operation::minus:
-			term -= value;
-			break;
-		case operation::mult:
-			term *= value;
-			break;
-		case operation::div:
-			term /= value;
-			break;
-		default:
-			break;
-		}
+		T value = calculate_term_value<T>(*eq_terms_it, point, field_var, cons_var, fv_eq);
+		apply_operation(term, op, value);
 		++eq_terms_it;
 	}
 	return term;
@@ -402,7 +366,7 @@ void Solver::fill_fv_underneath(int i, vector<T*>& fv_new, vector<int>& skipped,
 				skipped.push_back(var);
 			continue;
 		}
-		if (var_name[var] == "A")
+		if (var_name[var] == var_name[A])
 			*fv_new[var] = a[i];
 		else
 			*fv_new[var] = make_fv_equation<T>(var_name[var], i, fv_new, cons_var);
