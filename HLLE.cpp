@@ -160,9 +160,7 @@ void HLLE::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double
 void HLLE::ComputeSourceTerm(const adept::adouble* cv, adept::adouble* source, int i)
 {
 	using adept::adouble;
-	//vector<adouble> fv_a(var_num);
-	//vector<vector<adouble>> fv_side(2, vector<adouble> (var_num));
-	//vector<vector<double>> x_and_as(2, vector<double> (3));
+
 	double da, dx;
 	double gamma_ = GetGamma();
 
@@ -172,25 +170,8 @@ void HLLE::ComputeSourceTerm(const adept::adouble* cv, adept::adouble* source, i
 		fv_ref[v] = &fv_a[v];
 
 	fill_fv_equations<adept::adouble>(fv_ref, i, true, cv);
-	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	//{
-		//fv_a[var] = make_fv_equation<adouble>(var_name[var], i, fv_a, cv);
-	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	//}
-	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	//{
-	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	//}
-	/*x_and_as[0][1] = x[i];
-	x_and_as[0][2] = x[i + 1];*/
-
-	//da = 0.5 * (a[i + 1] - a[max(i - 1, 0)]);
-	//dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
-
 	for (int eq = 0; eq < eq_num; ++eq)
-		source[eq] = make_equation<adouble>(eq, Solver::equation::term_name::source, fv_ref/*, fv_side, x_and_as*/) /** da*/ /*/ dx*/;
+		source[eq] = make_equation<adouble>(eq, Solver::equation::term_name::source, fv_ref);
 }
 
 void HLLE::SetRHS()
@@ -200,29 +181,13 @@ void HLLE::SetRHS()
 	vector<double> fv_a(var_num);
 	for (int v = 0; v < var_num; ++v)
 		fv_ref[v] = &fv_a[v];
-	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	//vector<vector<double>> x_and_as(2, vector<double>(3));
 
 	for (int i = 1; i < ib2; ++i)
 	{
 		fill_fv_equations<double>(fv_ref, i);
-		//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-		//{
-		//	fv_a[var] = make_fv_equation<double>(var_name[var], i);
-			//fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-			//fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-		//}
-		//for (int i_ = i - 1; i_ <= i + 1; ++i_)
-		//{
-		//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-		//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-		//}
-
-		//double da = 0.5 * (a[i + 1] - a[i - 1]);
-		//double dx = 0.5 * (x[i + 1] - x[max(i - 1, 0)]) + 1e-20;
 		for (int eq = 0; eq < eq_num; ++eq) {
 			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
-			rhs[eq][i] += make_equation<double>(eq, Solver::equation::term_name::source, fv_ref/*, fv_side, x_and_as*/) /** da*/ /*/ dx*/;
+			rhs[eq][i] += make_equation<double>(eq, Solver::equation::term_name::source, fv_ref);
 		}
 	}
 }
@@ -306,8 +271,6 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 		fv_ref[var] = &fv_val[var];
 
 	fill_fv_equations<adouble>(fv_ref, i, true, x_);
-	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	//	fv_a[var] = make_fv_equation<adouble>(var_name[var], i, fv_a, x_);
 
 	vector<adouble*> fv_o(var_num);
 	vector<adouble> state(var_num);
@@ -510,25 +473,12 @@ vector<adept::adouble> HLLE::construct_hlle_flux_array(const vector<adept::adoub
 	vector<adept::adouble> flux(eq_num);
 	unsigned int eq = 0;
 
-	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	//vector<vector<double>> x_and_as(2, vector<double>(3));
-	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	//{
-	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	//}
-	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	//{
-	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	//}
-
 	for (const auto& equation : equations)
 	{
 		adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars) * term;
 		term = -SRp * SLm * direction;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars) * term;
 		flux[eq] /= (SRp - SLm);
 		++eq;
 	}
@@ -542,26 +492,13 @@ vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adoub
 	adept::adouble S_K = (direction > 0. ? SLm : SRp);
 	adept::adouble p_star = S_K * (*vars[P] + *vars[RHO] * (S_K - *vars[U]) * (S_star - *vars[U]));
 
-	//vector<vector<adept::adouble>> fv_side(2, vector<adept::adouble>(var_num));
-	//vector<vector<double>> x_and_as(2, vector<double>(3));
-	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	//{
-	//	fv_side[0][var] = make_fv_equation(var_name[var], max(i - 1, 0));
-	//	fv_side[1][var] = make_fv_equation(var_name[var], i + 1);
-	//}
-	//for (int i_ = i - 1; i_ <= i + 1; ++i_)
-	//{
-	//	x_and_as[0][i_ - (i - 1)] = x[max(i_, 0)];
-	//	x_and_as[1][i_ - (i - 1)] = a[max(i_, 0)];
-	//}
-
 	unsigned int eq = 0;
 	for (const auto& equation : equations)
 	{
 		adept::adouble term = (direction > 0. ? SLm : SRp);
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars) * term;
 		term = -1.;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars/*, fv_side, x_and_as*/) * term;
+		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars) * term;
 		flux[eq] *= S_star;
 		flux[eq] += p_star * D_star[eq];
 		

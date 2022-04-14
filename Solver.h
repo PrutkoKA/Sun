@@ -96,8 +96,8 @@ struct eq_term
 class Solver
 {
 public:
-	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} /*, {"nA", 3}*/ };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}, {"A", 5}, {"dA", 6}, {"dp", 6}, {"T", 7}/*, {"C2", 5}*//*, {"n", 4}*/ };
+	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
+	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}, {"A", 5}, {"dA", 6}, {"dp", 7}, {"T", 8} };
 	enum Vars_o {
 		RHO,
 		U,
@@ -233,19 +233,12 @@ public:
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	template<typename T>
-	T make_equation(const int eq, const equation::term_name term_name, const vector<T*>& f_vars/*, const vector<vector<T>>& f_vars_side = vector<vector<T>>(), const vector<vector<double>>& x_and_as = vector<vector<double>>()*/);
+	T make_equation(const int eq, const equation::term_name term_name, const vector<T*>& f_vars);
 	template<typename T>
 	T make_fv_equation(const string& eq_name, const int point, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr);
-	//void fill_fv_equations(vector<adept::adouble>& fv_a, int i, const adept::adouble* x_);
-	//void fill_fv_equations(vector<vector<double>>& fv_a, int i);
-	////void fill_fv_equations(vector<adept::adouble>& fv, int i);
-	//void fill_fv_equations(vector<double>& fv, int i, bool compute_differential = true);
 
 	template<typename T>
 	void fill_fv_equations(vector<T*>& fv_a, int i, bool compute_differential = true, const T* x_ = nullptr);
-
-	//template<typename fv_type>
-	//void fill_fv_equations(vector<fv_type>& fv, int i, const fv_type* x_ = nullptr, bool compute_differential = true);
 
 	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
 
