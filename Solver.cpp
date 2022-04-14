@@ -112,10 +112,17 @@ Solver::Solver(sol_struct& sol_init_) :
 		"A",
 		{ "A" }
 	);
+	//double rgas = (gamma - 1.) * Cp / gamma;
+	//temp = p[i] / (rgas * rho);
+	// T = p * gamma / (gamma - 1) / Cp / rho
 	set_fv_equation(		// dA
-		"dA",
-		{ "dA" }
+		"T",
+		{ "p", "*GAMMA", "/GAMMAM", "/CP", "/Rho" }
 	);
+	//set_fv_equation(		// dA
+	//	"dA",
+	//	{ "dA" }
+	//);
 }
 
 void Solver::SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_)
@@ -255,7 +262,7 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 	bool arrays_are_provided = cons_var;
 	if (v_type == eq_term::var_type::not_defined)
 	{
-		if (var_name_ == "A")
+		if (var_name_ == var_name[A])
 		{
 			v_type = eq_term::var_type::area;
 			return /*differential ? (a[point] - a[max(0, point - 1)]) * alpha1 + (a[point + 1] - a[point]) * alpha2 :*/ 
@@ -270,6 +277,11 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 		{
 			v_type = eq_term::var_type::gamma;
 			return gamma;
+		}
+		if (var_name_ == "CP")
+		{
+			v_type = eq_term::var_type::cp;
+			return Cp;
 		}
 		if (vars.find(var_name_) != vars.end())
 		{
@@ -309,6 +321,8 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 			return gamma - 1.;
 		case eq_term::var_type::gamma:
 			return gamma;
+		case eq_term::var_type::cp:
+			return Cp;
 		case eq_term::var_type::conservative:
 		{
 			return arrays_are_provided ? cons_var[v_id] : cv[v_id][point];
@@ -344,7 +358,7 @@ T Solver::make_fv_equation(const string& eq_name, const int point, const vector<
 
 	auto& eq_terms = fv_equation.at(eq_name);
 	operation op = eq_terms[0].op;
-	bool differential = false && eq_name[0] == 'd';
+	//bool differential = false && eq_name[0] == 'd';
 	T term = calculate_term_value(eq_terms[0], point, field_var, cons_var/*, differential*/);
 	if (op != operation::plus)
 		term = -term;
@@ -381,20 +395,27 @@ void Solver::fill_fv_equations(vector<adept::adouble>& fv_a, int i, const adept:
 {
 	vector<int> skipped;
 
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		if (var_name[var][0] == 'd')
-		{
-			skipped.push_back(var);
-			continue;
-		}
-		if (var_name[var] == "A")
-			fv_a[var] = a[i];
-		else
-			fv_a[var] = make_fv_equation<adept::adouble>(var_name[var], i, fv_a, x_);
-	}
+	vector<adept::adouble*> fv_new(var_num);
+	for (int v = 0; v < var_num; ++v)
+		fv_new[v] = &fv_a[v];
 
-	int left_id = max(0, i - 1);
+	fill_fv_underneath<adept::adouble>(i, fv_new, skipped, true, fv_a, x_);
+	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	//{
+	//	if (var_name[var][0] == 'd')
+	//	{
+	//		skipped.push_back(var);
+	//		continue;
+	//	}
+	//	if (var_name[var] == "A")
+	//		*fv_new[var] = a[i];
+	//	else
+	//		*fv_new[var] = make_fv_equation<adept::adouble>(var_name[var], i, fv_a, x_);
+	//}
+
+	compute_differential_var<adept::adouble>(i, skipped, fv_new);
+
+	/*int left_id = max(0, i - 1);
 	int right_id = min(imax - 1, i + 1);
 	double alpha1(0.); 
 	double alpha2(0.);
@@ -418,27 +439,34 @@ void Solver::fill_fv_equations(vector<adept::adouble>& fv_a, int i, const adept:
 		int prev_var = vars_o[name];
 
 		fv_a[var] = (fv_a[prev_var] - fv_left[prev_var]) * alpha1 + (fv_right[prev_var] - fv_a[prev_var]) * alpha2;
-	}
+	}*/
 }
 
 void Solver::fill_fv_equations(vector<vector<double>>& fv, int i)
 {
 	vector<int> skipped;
 
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		if (var_name[var][0] == 'd')
-		{
-			skipped.push_back(var);
-			continue;
-		}
-		if (var_name[var] == var_name[A])
-			fv[var][i] = a[i];
-		else
-			fv[var][i] = make_fv_equation<double>(var_name[var], i);
-	}
+	vector<double*> fv_new(var_num);
+	for (int v = 0; v < var_num; ++v)
+		fv_new[v] = &fv[v][i];
 
-	int left_id = max(0, i - 1);
+	fill_fv_underneath<double>(i, fv_new, skipped);
+	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	//{
+	//	if (var_name[var][0] == 'd')
+	//	{
+	//		skipped.push_back(var);
+	//		continue;
+	//	}
+	//	if (var_name[var] == var_name[A])
+	//		*fv_new[var] = a[i];
+	//	else
+	//		*fv_new[var] = make_fv_equation<double>(var_name[var], i);
+	//}
+	
+	compute_differential_var<double>(i, skipped, fv_new);
+
+	/*int left_id = max(0, i - 1);
 	int right_id = min(imax - 1, i + 1);
 	double alpha1(0.);
 	double alpha2(0.);
@@ -462,75 +490,82 @@ void Solver::fill_fv_equations(vector<vector<double>>& fv, int i)
 		int prev_var = vars_o[name];
 
 		fv[var][i] = (fv[prev_var][i] - fv_left[prev_var]) * alpha1 + (fv_right[prev_var] - fv[prev_var][i]) * alpha2;
-	}
+	}*/
 }
 
-void Solver::fill_fv_equations(vector<adept::adouble>& fv, int i)
-{
-	vector<int> skipped;
-
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		if (var_name[var][0] == 'd')
-		{
-			skipped.push_back(var);
-			continue;
-		}
-		if (var_name[var] == var_name[A])
-			fv[var] = a[i];
-		else
-			fv[var] = make_fv_equation<double>(var_name[var], i);
-	}
-
-	int left_id = max(0, i - 1);
-	int right_id = min(imax - 1, i + 1);
-	double alpha1(0.);
-	double alpha2(0.);
-	vector<double> fv_left, fv_right;
-
-	if (!skipped.empty())
-	{
-		fv_left.resize(var_num);
-		fv_right.resize(var_num);
-		alpha1 = (x[right_id] - x[i]) / (x[right_id] - x[left_id] + 1e-20);
-		alpha2 = (x[i] - x[left_id]) / (x[right_id] - x[left_id] + 1e-20);
-
-		fill_fv_equations(fv_left, left_id, false);
-		fill_fv_equations(fv_right, right_id, false);
-	}
-
-	for (int& var : skipped)
-	{
-		string name = var_name[var];
-		name.erase(name.begin());
-		int prev_var = vars_o[name];
-
-		fv[var] = (fv[prev_var] - fv_left[prev_var]) * alpha1 + (fv_right[prev_var] - fv[prev_var]) * alpha2;
-	}
-}
+//void Solver::fill_fv_equations(vector<adept::adouble>& fv, int i)
+//{
+//	vector<int> skipped;
+//
+//	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+//	{
+//		if (var_name[var][0] == 'd')
+//		{
+//			skipped.push_back(var);
+//			continue;
+//		}
+//		if (var_name[var] == var_name[A])
+//			fv[var] = a[i];
+//		else
+//			fv[var] = make_fv_equation<double>(var_name[var], i);
+//	}
+//
+//	int left_id = max(0, i - 1);
+//	int right_id = min(imax - 1, i + 1);
+//	double alpha1(0.);
+//	double alpha2(0.);
+//	vector<double> fv_left, fv_right;
+//
+//	if (!skipped.empty())
+//	{
+//		fv_left.resize(var_num);
+//		fv_right.resize(var_num);
+//		alpha1 = (x[right_id] - x[i]) / (x[right_id] - x[left_id] + 1e-20);
+//		alpha2 = (x[i] - x[left_id]) / (x[right_id] - x[left_id] + 1e-20);
+//
+//		fill_fv_equations(fv_left, left_id, false);
+//		fill_fv_equations(fv_right, right_id, false);
+//	}
+//
+//	for (int& var : skipped)
+//	{
+//		string name = var_name[var];
+//		name.erase(name.begin());
+//		int prev_var = vars_o[name];
+//
+//		fv[var] = (fv[prev_var] - fv_left[prev_var]) * alpha1 + (fv_right[prev_var] - fv[prev_var]) * alpha2;
+//	}
+//}
 
 void Solver::fill_fv_equations(vector<double>& fv, int i, bool compute_differential)
 {
 	vector<int> skipped;
 
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-	{
-		if (var_name[var][0] == 'd')
-		{
-			if (compute_differential)
-				skipped.push_back(var);
-			continue;
-		}
+	vector<double*> fv_new(var_num);
+	for (int v = 0; v < var_num; ++v)
+		fv_new[v] = &fv[v];
 
-		if (var_name[var] == var_name[A])
-			fv[var] = a[i];
-		else
-			fv[var] = make_fv_equation<double>(var_name[var], i);
-	}
+	fill_fv_underneath<double>(i, fv_new, skipped);
+	//for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	//{
+	//	if (var_name[var][0] == 'd')
+	//	{
+	//		if (compute_differential)
+	//			skipped.push_back(var);
+	//		continue;
+	//	}
+
+	//	if (var_name[var] == var_name[A])
+	//		*fv_new[var] = a[i];
+	//	else
+	//		*fv_new[var] = make_fv_equation<double>(var_name[var], i);
+	//}
 
 	if (compute_differential)
 	{
-		int left_id = max(0, i - 1);
+		compute_differential_var<double>(i, skipped, fv_new);
+
+		/*int left_id = max(0, i - 1);
 		int right_id = min(imax - 1, i + 1);
 		double alpha1(0.);
 		double alpha2(0.);
@@ -554,7 +589,55 @@ void Solver::fill_fv_equations(vector<double>& fv, int i, bool compute_different
 			int prev_var = vars_o[name];
 
 			fv[var] = (fv[prev_var] - fv_left[prev_var]) * alpha1 + (fv_right[prev_var] - fv[prev_var]) * alpha2;
+		}*/
+	}
+}
+
+template<typename T>
+double Solver::compute_differential_var(int i, const vector<int>& skipped, vector<T*>& fv)
+{
+	int left_id = max(0, i - 1);
+	int right_id = min(imax - 1, i + 1);
+	double alpha1(0.);
+	double alpha2(0.);
+	vector<double> fv_left, fv_right;
+
+	if (!skipped.empty())
+	{
+		fv_left.resize(var_num);
+		fv_right.resize(var_num);
+		alpha1 = (x[right_id] - x[i]) / (x[right_id] - x[left_id] + 1e-20);
+		alpha2 = (x[i] - x[left_id]) / (x[right_id] - x[left_id] + 1e-20);
+
+		fill_fv_equations(fv_left, left_id, false);
+		fill_fv_equations(fv_right, right_id, false);
+	}
+
+	for (const int& var : skipped)
+	{
+		string name = var_name[var];
+		name.erase(name.begin());
+		int prev_var = vars_o[name];
+
+		*fv[var] = (*fv[prev_var] - fv_left[prev_var]) * alpha1 + (fv_right[prev_var] - *fv[prev_var]) * alpha2;
+	}
+}
+
+template<typename T>
+void Solver::fill_fv_underneath(int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential, const vector<T>& field_var, const T* cons_var)
+{
+	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	{
+		if (var_name[var][0] == 'd')
+		{
+			if (compute_differential)
+				skipped.push_back(var);
+			continue;
 		}
+		if (var_name[var] == "A")
+			*fv_new[var] = a[i];
+		else
+			*fv_new[var] = make_fv_equation<T>(var_name[var], i, field_var, cons_var);
 	}
 }
 
