@@ -391,6 +391,40 @@ void Laval5()	// Standard example as in Blazek (CUSP)
 	// cusp_s->HideOutput();
 	// cusp_s->InverseGrid();
 
+	// Euler euqations
+	cusp_s->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, cusp_s->vars, cusp_s->vars_o);	// RhoA, RhoUA
+	cusp_s->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p", "*dA" }, cusp_s->vars, cusp_s->vars_o);		// RhoUA, (RhoUU+p)A
+	cusp_s->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "*A" }, { "" }, cusp_s->vars, cusp_s->vars_o);		// RhoEA, (RhoEU+pU)A
+
+	cusp_s->set_fv_equation(		// Rho = RhoA / A
+		"Rho",
+		{ "RhoA", "/A", "" }		// There is dummy for unambiguous conservation
+	);
+	cusp_s->set_fv_equation(		// E = RhoEA / RhoA
+		"E",
+		{ "RhoEA", "/RhoA", "" }		// There is dummy for unambiguous conservation
+	);
+	cusp_s->set_fv_equation(		// U = RhoUA / RhoA
+		"U",
+		{ "RhoUA", "/RhoA", "" }
+	);
+	cusp_s->set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
+		"p",
+		{ "RhoEA", "/RhoA", "-0.5U^2", "*GAMMAM", "*Rho" }
+	);
+	cusp_s->set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
+		"H",
+		{ "GAMMA", "/GAMMAM", "*p", "/Rho", "+0.5U^2" }
+	);
+	cusp_s->set_fv_equation(		// A
+		"A",
+		{ "A" }
+	);
+	cusp_s->set_fv_equation(		// T = p * gamma / (gamma - 1) / Cp / rho
+		"T",
+		{ "p", "*GAMMA", "/GAMMAM", "/CP", "/Rho" }
+	);
+
 	double convtol = cusp_s->GetTolerance();
 	double drho = 1.;
 
@@ -737,6 +771,40 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	hllc_s->ReadBoundaries("Input/sod_boundary_test.yml");
 	hllc_s->SetOutputFile(output_file);
 
+	// Euler euqations
+	hllc_s->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hllc_s->vars, hllc_s->vars_o);	// RhoA, RhoUA
+	hllc_s->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p", "*dA" }, hllc_s->vars, hllc_s->vars_o);		// RhoUA, (RhoUU+p)A
+	hllc_s->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "*A" }, { "" }, hllc_s->vars, hllc_s->vars_o);		// RhoEA, (RhoEU+pU)A
+
+	hllc_s->set_fv_equation(		// Rho = RhoA / A
+		"Rho",
+		{ "RhoA", "/A", "" }		// There is dummy for unambiguous conservation
+	);
+	hllc_s->set_fv_equation(		// E = RhoEA / RhoA
+		"E",
+		{ "RhoEA", "/RhoA", "" }		// There is dummy for unambiguous conservation
+	);
+	hllc_s->set_fv_equation(		// U = RhoUA / RhoA
+		"U",
+		{ "RhoUA", "/RhoA", "" }
+	);
+	hllc_s->set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
+		"p",
+		{ "RhoEA", "/RhoA", "-0.5U^2", "*GAMMAM", "*Rho" }
+	);
+	hllc_s->set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
+		"H",
+		{ "GAMMA", "/GAMMAM", "*p", "/Rho", "+0.5U^2" }
+	);
+	hllc_s->set_fv_equation(		// A
+		"A",
+		{ "A" }
+	);
+	hllc_s->set_fv_equation(		// T = p * gamma / (gamma - 1) / Cp / rho
+		"T",
+		{ "p", "*GAMMA", "/GAMMAM", "/CP", "/Rho" }
+	);
+
 	double convtol = hllc_s->GetTolerance();
 	double drho = 1.;
 
@@ -790,6 +858,7 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 
 	hllc_s->grid.AddColumn("old_coords", hllc_s->grid.GetValues("coordinate"));
 	hllc_s->iter = 0.;
+
 	int iter = 0;
 	double ttime = 0.;
 
@@ -903,6 +972,246 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	cout << "Execution time: " << (clock() - start_time) / CLOCKS_PER_SEC << "sec." << endl;
 	hllc_s->PrintResult();
 	hllc_s->deactivate_adept_stack();
+
+	cout << endl << "   OK   " << endl;
+}
+
+void Rad_function(const std::vector<std::vector<double>>& params, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double& result)
+{
+	const int T_id = var_name_ids.at(names[0]);
+	const double& T = params[T_id][i];
+	constexpr double C = 3e-22;
+	if (T < 2e4)
+	{
+		result = C * pow((0.5e4 * T), 3);
+	}
+	else if (T <= 2e5)
+	{
+		result = C;
+	}
+	else
+	{
+		result = C / sqrt(0.5e5 * T) + 2e-23 * sqrt(1e-8 * T);
+	}
+}
+
+void AdjustMesh(Solver* solver, Loop& loop)
+{
+	
+	vector<vector<double>> funcs(1, solver->grid.GetValues("T"));
+	constexpr double X_max = 12500000.;
+	constexpr double Rho_max = 1.0793596511952E-10;
+	solver->grid.CalculateResolution(X_max, Rho_max, solver->c_var_name[solver->RHO_A], "coordinate", funcs, { 1056100. });
+	solver->grid.CalculateConcentration(X_max, "coordinate");
+
+	solver->x = solver->grid.RefineMesh(1., 10., 1.);
+	vector < double > ran1(solver->x);
+
+	solver->SetGrid(loop);
+
+	vector < string > ignore(1, loop.TYPE_COL);
+	vector < vector < double > > new_tab = solver->grid.NewTable("coordinate", ran1, ignore, false);
+	solver->grid.SetData(new_tab);
+
+	init_sun_atmosphere(solver);
+
+	for (unsigned int var = 0; var < solver->CONS_VAR_COUNT; ++var)
+		solver->cv[var] = solver->grid.GetValues(solver->c_var_name[var]);
+
+	solver->RefreshBoundaries();						// Refresh boundary conditions
+	solver->RhoUPH();
+}
+
+void init_sun_atmosphere(Solver* solver)
+{
+	cout << "Initializing flow" << endl;
+
+	int eq_num = solver->eq_num;
+	int imax = solver->imax;
+	int var_num = solver->var_num;
+
+	solver->cv.resize(eq_num);
+	solver->cvold.resize(eq_num);
+	solver->diss.resize(eq_num);
+	solver->rhs.resize(eq_num);
+	solver->Q_star.resize(eq_num);
+	for (int i = 0; i < eq_num; ++i) {
+		solver->cv[i].resize(imax, 0.);
+		solver->cvold[i].resize(imax, 0.);
+		solver->diss[i].resize(imax, 0.);
+		solver->rhs[i].resize(imax, 0.);
+		solver->Q_star[i].resize(imax, 0.);
+	}
+	solver->p.resize(imax, 0.);
+	solver->dt.resize(imax, 0.);
+	solver->dummy.resize((imax + 1) * (var_num + 1), 0.);
+
+	const vector<double>& rho = solver->grid.GetValues("Rho");
+	const vector<double>& Temp = solver->grid.GetValues("T");
+	constexpr double k_Planc = 6.626e-34;
+	constexpr double m_proton_rep = 5.9786e+26;
+	for (int i = 0; i < imax; ++i)
+	{
+		solver->cv[solver->RHO_A][i] = rho[i] * solver->a[i];		//	$\rho S$
+		solver->cv[solver->RHO_U_A][i] = 0.;					//	Initial velocity iz zero, I think $\rho u S$
+		solver->p[i] = 2. * m_proton_rep * rho[i] * k_Planc * Temp[i];
+		solver->cv[solver->RHO_E_A][i] = 1.5 * solver->p[i] * solver->a[i];	//	$\rho E S$
+	}
+
+	for (unsigned int var = 0; var < solver->CONS_VAR_COUNT; ++var)
+		solver->grid.AddColumn(solver->c_var_name[var], solver->cv[var]);
+
+	solver->grid.CalculateResolution(1., 1., solver->c_var_name[solver->RHO_A], "coordinate");
+	solver->grid.CalculateConcentration(1., "coordinate");
+
+	if (!solver->time_expl) {
+		solver->L_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
+		solver->U_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
+		solver->D_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
+	}
+}
+
+void loop_foot_point(const string& output_file, const string& yml_file, const double end_time_)	// Sun loop
+{
+	cout << endl << "  ---  Loop foot point heating test  ---  " << endl;
+
+	string file_name = yml_file;
+
+	Loop loop;
+	Solver* hll;
+
+	hll = CreateReadConfigFile(file_name);
+
+	hll->HideOutput();
+
+	loop.ReadFile("Input/sun_loop_mesh.txt");
+
+	// Make even grid
+	//vector < vector < double > > new_tab;
+	//vector < double > ran1 = loop.MakeRange(0., 12500000., 50000.);
+	//vector < string > ignore;
+	//ignore.push_back(loop.TYPE_COL);
+	//new_tab = loop.NewTable("coordinate", ran1, ignore, true);
+	//loop.PrintTable("Output/sum_mesh.txt", new_tab);
+
+	hll->SetGrid(loop);
+	hll->ReadBoundaries("Input/sun_loop_boundary.yml");
+	hll->SetOutputFile(output_file);
+
+	// Euler euqations
+	hll->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hll->vars, hll->vars_o);	// RhoA, RhoUA
+	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*g" }, hll->vars, hll->vars_o);
+	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc" }, hll->vars, hll->vars_o);
+
+	hll->set_fv_equation(		// Rho = RhoA / A
+		"Rho",
+		{ "RhoA", "/A", "" }		// There is dummy for unambiguous conservation
+	);
+	hll->set_fv_equation(		// n = 5.9786e+26 * Rho
+		"n",
+		{ "5.9786e+26Rho" }
+	);
+	hll->set_fv_equation(		// E = RhoEA / RhoA
+		"E",
+		{ "RhoEA", "/RhoA", "" }		// There is dummy for unambiguous conservation
+	);
+	hll->set_fv_equation(		// U = RhoUA / RhoA
+		"U",
+		{ "RhoUA", "/RhoA", "" }
+	);
+	hll->set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
+		"p",
+		{ "0.66666667Rho", "*E", "" }
+	);
+	hll->set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
+		"H",
+		{ "GAMMA", "/GAMMAM", "*p", "/Rho", "+0.5U^2" }
+	);
+	hll->set_fv_equation(		// A
+		"A",
+		{ "A" }
+	);
+	hll->set_fv_equation(		// T = p * gamma / (gamma - 1) / Cp / rho
+		"T",
+		{ "p", "/2n", "/k" }
+	);
+	hll->set_fv_equation(		// FT = 10e-6 * T^2.5 * dT
+		"FT",
+		{ "1e-6T^2.5", "*dT", "" }
+	);
+	hll->AddDelayedFvEquation({ "FT" });
+
+	hll->set_function("RadFunc", Rad_function, hll->fv, hll->vars_o, { "T" });
+	//hll->set_fv_equation(		// Lam_a = 3.75e-11 * T^3
+	//	"Rad",
+	//	{ "RadFunc" }
+	//);
+
+	double convtol = hll->GetTolerance();
+	double drho = 1.;
+	int maxiter = hll->GetMaxIterNum();
+
+	init_sun_atmosphere(hll);
+
+	// Parameters to adjust mesh were used
+	if (hll->remesh)
+		for (int i = 0; i < 200; ++i) {
+			AdjustMesh(hll, loop);
+		}
+
+	hll->CalculateVolumes();
+	hll->grid.SetRow("volume", hll->vol);
+
+	hll->grid.PrintTable("Output/sun_table.txt");
+
+	return;
+
+	hll->RhoUPH();
+	hll->RefreshBoundaries();
+
+	double fac = 1. / 1e1;
+	double physDt_ = 0.2e-2 * fac / 1.;
+
+	hll->cvnm1 = hll->cv;
+	hll->iter = 0.;
+	hll->Global_Time = 0.;
+	hll->cvn = hll->cv;
+
+	hll->S.resize((hll->ib2 - 1) * hll->eq_num, (hll->ib2 - 1) * hll->eq_num);
+	hll->S.reserve(VectorXi::Constant((hll->ib2 - 1) * hll->eq_num, hll->eq_num * hll->eq_num));
+
+	hll->iter = 0.;
+
+	int iter = 0;
+	double ttime = 0.;
+
+	double start_time = clock();
+	if (hll->time_stepping == 0) {
+		while (ttime < end_time_) {
+			hll->iter = 0;
+			drho = 1.;
+			hll->calculate_mass_matrix();
+			hll->fill_inverse_mass_matrix();
+
+			hll->cvn_old = hll->cvn;
+			hll->cvnm1_old = hll->cvnm1;
+
+			for (int iter = 0; iter < maxiter && drho > convtol && true; ++iter)
+			{
+				drho = hll->Solve(physDt_);
+			}
+
+			hll->cvnm1 = hll->cvn;
+			hll->cvn = hll->cv;
+
+			ttime += physDt_;
+			iter += hll->iter;
+			cout << iter << "\t" << ttime << endl;
+		}
+	}
+	cout << "Execution time: " << (clock() - start_time) / CLOCKS_PER_SEC << "sec." << endl;
+	hll->PrintResult();
+	hll->deactivate_adept_stack();
 
 	cout << endl << "   OK   " << endl;
 }

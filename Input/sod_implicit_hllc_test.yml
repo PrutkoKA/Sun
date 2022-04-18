@@ -3,6 +3,7 @@ gas: Ideal
 Cp: 1
 gamma: 1.4
 cfl: 0.5
+g: 9.8
 lts: false                  # local time step: false ? true ?
 ERK: 5_4                    # Explicit Runge-Kutta Scheme (stage, order)    5_2, 5_3, 5_4
 IRK: 4_5                    # Implicit Runge-Kutta Scheme (stage, order, variant)   3_3, 3_4_1, 3_4_2, 6_4, 4_5, 11_5, 6_6

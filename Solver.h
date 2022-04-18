@@ -34,6 +34,7 @@ struct sol_struct
 	int max_iter_num;
 	double tolerance;
 	double gamma;
+	double free_g;
 	bool time_expl;
 
 	vector < double > RK_stage_coeffs;
@@ -75,10 +76,13 @@ struct eq_term
 	{
 		conservative,
 		field,
+		function,
 		gamma,
 		gammam,
 		area,
 		cp,
+		g,
+		k_planc,
 		not_defined
 	};
 	operation op;
@@ -96,31 +100,44 @@ struct eq_term
 class Solver
 {
 public:
+	const double k_planc = 6.626e-34;
+
+	map<string, int> func_name_ids;
 	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
-	map < string, int > vars_o{ {"Rho", 0}, {"U", 1}, {"p", 2}, {"E", 3}, {"H", 4}, {"A", 5}, {"dA", 6}, {"dp", 7}, {"T", 8} };
 	enum Vars_o {
 		RHO,
 		U,
-		P,
 		E,
+		P,
 		H,
 		A,
+		N,
+		TEMP,
 		DA,
 		DP,
-		TEMP,
+		DTEMP,
+		FT,
+		//RAD,
+		RADFUNC,
 		FIELD_VAR_COUNT
 	};
+	map < string, int > vars_o{ {"Rho", RHO}, {"U", U}, {"E", E}, {"p", P}, {"H", H}, {"A", A}, {"n", N}, {"T", TEMP}, {"dA", DA}, {"dp", DP}, {"dT", DTEMP}, {"FT", FT}/*, {"Rad", RAD}*/, {"RadFunc", RADFUNC} };
 
 	map<int, string> var_name = {
 		{RHO, "Rho"},
 		{U, "U"},
-		{P, "p"},
 		{E, "E"},
+		{P, "p"},
 		{H, "H"},
 		{A, "A"},
+		{N, "n"},
+		{TEMP, "T"},
 		{DA, "dA"},
 		{DP, "dp"},
-		{TEMP, "T"}
+		{DTEMP, "dT"},
+		{FT, "FT"},
+		//{RAD, "Rad"},
+		{RADFUNC, "RadFunc"}
 	};
 
 	enum Vars {
@@ -178,6 +195,19 @@ public:
 		pair<string, vector<eq_term>> get_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	};
 
+	using custom_f = std::function<void(const vector<vector<double>>&, const map < string, int >&, const vector<string>&, int, double&)>;
+
+	struct custom_func
+	{
+		string func_name;
+		const vector<vector<double>>& params;
+		const map<string, int>& var_names;
+		vector<string> param_names;
+		custom_f func;
+		
+		custom_func(const string& func_name, custom_f function, const vector<vector<double>>& params, const map<string, int>& var_names, const vector<string>& param_names);
+	};
+
 	using DiagonalFunc = std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int,
 		std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int) >, std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int) >) >;
 
@@ -187,8 +217,10 @@ public:
 
 	int eq_num, var_num;
 	int cur_Q;
+	set<string> delayed_fv_equations;
 	vector < equation > equations;
 	map<string, vector<eq_term>> fv_equation;
+	map<string, custom_func> functions;
 
 	vector < vector < double > > cv;
 	vector < vector < double > > fv;	// field var
@@ -229,6 +261,7 @@ public:
 
 	Solver(sol_struct& sol_init_);
 
+	void AddDelayedFvEquation(const set<string>& equations_to_delay);
 	void SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_);
 	void set_fv_equation(const string& eq_name, const vector<string>& eq_terms_s);
 	void set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms);
@@ -237,8 +270,16 @@ public:
 	template<typename T>
 	T make_fv_equation(const string& eq_name, const int point, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr);
 
+	void set_function(const string& func_name, custom_f function, const vector<vector<double>>& params, const map<string, int>& var_names, const vector<string>& param_names);
+
+	enum class filling_type
+	{
+		common,		// fill fv as usual
+		only_vars,	// fill only fv without differentials
+		only_diff	// fill only differentials
+	};
 	template<typename T>
-	void fill_fv_equations(vector<T*>& fv_a, int i, bool compute_differential = true, const T* x_ = nullptr);
+	void fill_fv_equations(const filling_type& f_type, vector<T*>& fv_a, int i, bool compute_differential = true, const T* x_ = nullptr);
 
 	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
 
@@ -361,6 +402,7 @@ private:
 	int max_iter_num;				///< Maximal number of iterations
 	double tolerance;				///< General tolerance for established convergence
 	double gamma;					///< adiabatic number
+	double free_g;
 
 	vector < double > RK_stage_coeffs; 	///< Runge-Kutta stage coefficients
 	vector < vector < double > > RK_alpha;
@@ -397,7 +439,7 @@ private:
 	template<typename T>
 	void compute_differential_var(int i, const vector<int>& skipped, vector<T*>& fv);
 	template<typename T>
-	void fill_fv_underneath(int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential = true, const T* cons_var = nullptr);
+	void fill_fv_underneath(const filling_type& f_type, int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential = true, const T* cons_var = nullptr);
 	template<typename T>
 	void apply_operation(T& term, operation& op, const T& value);
 };

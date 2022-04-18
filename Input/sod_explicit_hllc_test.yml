@@ -2,6 +2,7 @@ solver: hllc             # cusp, cds, vanleer, hlle
 gas: Ideal
 Cp: 1
 gamma: 1.4
+g: 9.8
 cfl: 0.5
 lts: false                  # local time step: false ? true ?
 ERK: 5_4                    # Explicit Runge-Kutta Scheme (stage, order)    5_2, 5_3, 5_4

@@ -116,7 +116,7 @@ int DataBase::PrintRow(string file_name, valarray< double > row)
 	}
 
 	for (auto col = columns.begin(); col != columns.end(); ++col) {
-		fprintf(file, "%lf\t", row[col->second]);
+		fprintf(file, "%le\t", row[col->second]);
 	}
 	fprintf(file, "\n");
 	fclose(file);
@@ -282,7 +282,7 @@ vector < vector < double > > DataBase::NewTable(string col_name, vector < double
 		}
 		temp_va = GetFromPoint(col_name, val);
 		if (ignore_cols.size() > 0) {
-			//index = FindIndexInCol(col_name, val);
+			//index = FindIndexInCol(col_name, val);		// Think again
 			index = i;
 			for (auto col : ignore_cols) {
 				temp_va[columns[col]] = GetRow(index)[columns[col]];

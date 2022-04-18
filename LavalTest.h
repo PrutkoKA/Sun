@@ -42,6 +42,9 @@ void Laval7();
 
 void unsteady_sod_test(const string &output_file, const string& yml_file, const double end_time_ = 0.02);
 
+void init_sun_atmosphere(Solver* solver);
+void loop_foot_point(const string& output_file, const string& yml_file, const double end_time_);	// Sun loop
+
 void compare_files(const string& first_file, const string& second_file, const double eps = 1e-6);
 
 void Laval();

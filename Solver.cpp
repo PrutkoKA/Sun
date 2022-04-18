@@ -16,38 +16,39 @@ using namespace YAML;
 set < string > solvers { "cds", "cusp", "vanleer", "hlle" };
 
 Solver::Solver(sol_struct& sol_init_) :
-					Ideal((sol_init_.gas == "Ideal" ? true : false)),
-					Cp(sol_init_.Cp),
-					cfl(sol_init_.cfl),
-					max_iter_num(sol_init_.max_iter_num),
-					tolerance(sol_init_.tolerance),
-					gamma(sol_init_.gamma),
-					RK_stage_coeffs(sol_init_.RK_stage_coeffs),
-					RK_alpha(sol_init_.RK_alpha),
-					RK_beta(sol_init_.RK_beta),
-					res_smooth_flag(sol_init_.res_smooth_flag),
-					eps_impl_res_smooth(sol_init_.eps_impl_res_smooth),
-					ak(sol_init_.ak),
-					bk(sol_init_.bk),
-					ck(sol_init_.ck),
-					alpha(sol_init_.alpha),
-					time_expl(sol_init_.time_expl),
-					TSRK_teta(sol_init_.TSRK_teta),
-					TSRK_d(sol_init_.TSRK_d),
-					TSRK_eta(sol_init_.TSRK_eta),
-					TSRK_q(sol_init_.TSRK_q),
-					lts(sol_init_.lts),
-					remesh(sol_init_.remesh),
-					steadiness(sol_init_.steadiness), 
-					time_stepping(sol_init_.time_stepping),
-					solver_name(sol_init_.solver_name)
+	Ideal((sol_init_.gas == "Ideal" ? true : false)),
+	Cp(sol_init_.Cp),
+	cfl(sol_init_.cfl),
+	max_iter_num(sol_init_.max_iter_num),
+	tolerance(sol_init_.tolerance),
+	gamma(sol_init_.gamma),
+	free_g(sol_init_.free_g),
+	RK_stage_coeffs(sol_init_.RK_stage_coeffs),
+	RK_alpha(sol_init_.RK_alpha),
+	RK_beta(sol_init_.RK_beta),
+	res_smooth_flag(sol_init_.res_smooth_flag),
+	eps_impl_res_smooth(sol_init_.eps_impl_res_smooth),
+	ak(sol_init_.ak),
+	bk(sol_init_.bk),
+	ck(sol_init_.ck),
+	alpha(sol_init_.alpha),
+	time_expl(sol_init_.time_expl),
+	TSRK_teta(sol_init_.TSRK_teta),
+	TSRK_d(sol_init_.TSRK_d),
+	TSRK_eta(sol_init_.TSRK_eta),
+	TSRK_q(sol_init_.TSRK_q),
+	lts(sol_init_.lts),
+	remesh(sol_init_.remesh),
+	steadiness(sol_init_.steadiness),
+	time_stepping(sol_init_.time_stepping),
+	solver_name(sol_init_.solver_name)
 {
 	if (false)
 	{
 		make_fv_equation<adept::adouble>(var_name[0], 0);	// To resolve adouble template in HLLE. Whaaat?? It even may be not executed.
 		make_equation<double>(RHO_A, Solver::equation::term_name::dt, vector<double*>());
 		vector<adept::adouble*> b;
-		fill_fv_equations<adept::adouble>(b, 0);
+		fill_fv_equations<adept::adouble>(filling_type::common, b, 0);
 	}
 
 	eq_num = vars.size();
@@ -59,7 +60,8 @@ Solver::Solver(sol_struct& sol_init_) :
 	if (Ideal) {
 		cout << "\tgas: " << "Ideal" << endl;
 
-	} else {
+	}
+	else {
 		cout << "\tgas: " << "not Ideal" << endl;
 	}
 
@@ -85,39 +87,11 @@ Solver::Solver(sol_struct& sol_init_) :
 	cout << (steadiness ? "Steady problem\n" : "Unsteady problem\n");
 
 	RK_stages_num = RK_stage_coeffs.size();
+}
 
-	SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, vars, vars_o);	// RhoA, RhoUA
-	SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p", "*dA" }, vars, vars_o);		// RhoUA, (RhoUU+p)A
-	SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "*A" }, { "" }, vars, vars_o);		// RhoEA, (RhoEU+pU)A
-
-	set_fv_equation(		// Rho = RhoA / A
-		"Rho",
-		{ "RhoA", "/A", "" }		// There is dummy for unambiguous conservation
-	);
-	set_fv_equation(		// E = RhoEA / RhoA
-		"E",
-		{ "RhoEA", "/RhoA", "" }		// There is dummy for unambiguous conservation
-	);
-	set_fv_equation(		// U = RhoUA / RhoA
-		"U",
-		{ "RhoUA", "/RhoA", "" }
-	);
-	set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
-		"p",
-		{ "RhoEA", "/RhoA", "-0.5U^2", "*GAMMAM", "*Rho" }
-	);
-	set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
-		"H",
-		{ "GAMMA", "/GAMMAM", "*p", "/Rho", "+0.5U^2" }
-	);
-	set_fv_equation(		// A
-		"A",
-		{ "A" }
-	);
-	set_fv_equation(		// T = p * gamma / (gamma - 1) / Cp / rho
-		"T",
-		{ "p", "*GAMMA", "/GAMMAM", "/CP", "/Rho" }
-	);
+void Solver::AddDelayedFvEquation(const set<string>& equations_to_delay)
+{
+	delayed_fv_equations = equations_to_delay;
 }
 
 void Solver::SetEquation(string eq_name, const vector<string>& dt_term_, const vector<string>& dx_term_, const vector<string>& source_term, map < string, int > vars_, map < string, int > vars_o_)
@@ -138,6 +112,15 @@ void Solver::set_fv_equation(const string& eq_name, const vector<string>& eq_ter
 			eq_terms.push_back(term_s);
 
 	set_fv_equation(eq_name, eq_terms);
+}
+
+void Solver::set_function(const string& func_name, custom_f function, const vector<vector<double>>& params, const map<string, int>& var_names, const vector<string>& param_names)
+{
+	functions.insert(pair<string, custom_func>(func_name, custom_func(func_name, function, params, var_names, param_names)));
+	set_fv_equation(
+		func_name,
+		{ func_name, "" }
+	);
 }
 
 void Solver::set_fv_equation(const string& eq_name, const vector<eq_term>& eq_terms)
@@ -227,11 +210,31 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 			v_type = eq_term::var_type::cp;
 			return Cp;
 		}
+		if (var_name_ == "g")
+		{
+			v_type = eq_term::var_type::g;
+			return free_g;
+		}
+		if (var_name_ == "k")
+		{
+			v_type = eq_term::var_type::k_planc;
+			return k_planc;
+		}
 		if (vars.find(var_name_) != vars.end())
 		{
 			v_type = eq_term::var_type::conservative;
 			v_id = vars[var_name_];
 			return (arrays_are_provided ? cons_var[v_id] : cv[v_id][point]);
+		}
+		else if (functions.find(var_name_) != functions.end())
+		{
+			double result(0.);
+			v_type = eq_term::var_type::function;
+			v_id = func_name_ids.size();
+			func_name_ids[var_name_] = v_id;
+			custom_func& call = functions.at(var_name_);
+			call.func(fv, vars_o, call.param_names, point, result);
+			return result;
 		}
 		else
 		{
@@ -252,10 +255,21 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 			return gamma;
 		case eq_term::var_type::cp:
 			return Cp;
+		case eq_term::var_type::g:
+			return free_g;
+		case eq_term::var_type::k_planc:
+			return k_planc;
 		case eq_term::var_type::conservative:
 			return arrays_are_provided ? cons_var[v_id] : cv[v_id][point];
 		case eq_term::var_type::field:
 			return arrays_are_provided ? *field_var[v_id] : fv[v_id][point];
+		case eq_term::var_type::function:
+		{
+			double result(0.);
+			custom_func& call = functions.at(var_name_);
+			call.func(fv, vars_o, call.param_names, point, result);
+			return result;
+		}
 		}
 	}
 };
@@ -308,12 +322,12 @@ T Solver::make_equation_general(vector<eq_term>& eq_terms, int point, const vect
 }
 
 template<typename T>
-void Solver::fill_fv_equations(vector<T*>& fv_a, int i, bool compute_differential, const T* x_)
+void Solver::fill_fv_equations(const filling_type &f_type, vector<T*>& fv_a, int i, bool compute_differential, const T* x_)
 {
 	vector<int> skipped;
 
-	fill_fv_underneath<T>(i, fv_a, skipped, compute_differential, x_);
-	if (compute_differential)
+	fill_fv_underneath<T>(f_type, i, fv_a, skipped, compute_differential, x_);
+	if (compute_differential && f_type != filling_type::only_vars)
 		compute_differential_var<T>(i, skipped, fv_a);
 }
 
@@ -341,8 +355,8 @@ void Solver::compute_differential_var(int i, const vector<int>& skipped, vector<
 		alpha1 = (x[right_id] - x[i]) / (x[right_id] - x[left_id] + 1e-20);
 		alpha2 = (x[i] - x[left_id]) / (x[right_id] - x[left_id] + 1e-20);
 
-		fill_fv_equations<double>(fv_left_ref, left_id, false);
-		fill_fv_equations<double>(fv_right_ref, right_id, false);
+		fill_fv_equations<double>(filling_type::only_vars, fv_left_ref, left_id, false);		// Extra calculations if several d vars...
+		fill_fv_equations<double>(filling_type::only_vars, fv_right_ref, right_id, false);
 	}
 
 	for (const int& var : skipped)
@@ -356,20 +370,29 @@ void Solver::compute_differential_var(int i, const vector<int>& skipped, vector<
 }
 
 template<typename T>
-void Solver::fill_fv_underneath(int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential, const T* cons_var)
+void Solver::fill_fv_underneath(const filling_type& f_type, int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential, const T* cons_var)
 {
 	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
 	{
-		if (var_name[var][0] == 'd')
+		bool is_diff = var_name[var][0] == 'd';
+		if (is_diff && f_type != filling_type::only_vars)
 		{
 			if (compute_differential)
+			{
 				skipped.push_back(var);
+			}
 			continue;
 		}
-		if (var_name[var] == var_name[A])
-			*fv_new[var] = a[i];
-		else
-			*fv_new[var] = make_fv_equation<T>(var_name[var], i, fv_new, cons_var);
+		if (!is_diff && f_type != filling_type::only_diff)
+		{
+			if (f_type == filling_type::only_vars && delayed_fv_equations.contains(var_name[var]))
+				continue;
+
+			if (var_name[var] == var_name[A])
+				*fv_new[var] = a[i];
+			else
+				*fv_new[var] = make_fv_equation<T>(var_name[var], i, fv_new, cons_var);
+		}
 	}
 }
 
@@ -1147,10 +1170,6 @@ void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, dou
 	grid.CalculateResolution(1., 1., c_var_name[RHO_A], "coordinate");
 	grid.CalculateConcentration(1., "coordinate");
 
-	std::vector<double> v(grid.GetConcentration().size());
-	std::iota(v.begin(), v.end(), 0.);
-	double coef = 0.5;
-
 	x = grid.RefineMesh(1., 10., relax_coef);
 
 	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
@@ -1800,15 +1819,24 @@ void Solver::RhoUPH()
 	}
 
 	vector<double*> fv_ref(var_num);
-	for (int i = 0; i < imax; ++i)
+	vector<filling_type> f_types = { filling_type::only_vars, filling_type::only_diff };
+	for (auto f_type : f_types)
 	{
-		for (int v = 0; v < var_num; ++v)
-			fv_ref[v] = &fv[v][i];
+		for (int i = 0; i < imax; ++i)
+		{
+			for (int v = 0; v < var_num; ++v)
+				fv_ref[v] = &fv[v][i];
 
-		fill_fv_equations<double>(fv_ref, i);
+			fill_fv_equations<double>(f_type, fv_ref, i);
+		}
 	}
-		/*for (int var = 0; var < FIELD_VAR_COUNT; ++var)
-			fv[var][i] = make_fv_equation<double>(var_name[var], i);*/
+	if (!delayed_fv_equations.empty())
+		for (auto eq_name : delayed_fv_equations)
+		{
+			int var_id = vars_o.at(eq_name);
+			for (int i = 0; i < imax; ++i)
+				fv[var_id][i] = make_fv_equation<double>(eq_name, i);
+		}
 }
 
 void Solver::RhoUPH(vector < vector < double > >& cv_, vector < vector < double > >& fv_)
@@ -2116,6 +2144,14 @@ Solver::equation::equation(string eq_name_, vector<string> dt_term_, vector<stri
 	cur_source = get_equation(eq_name, source_term);
 }
 
+Solver::custom_func::custom_func(const string& func_name_, Solver::custom_f function_, const vector<vector<double>>& params_, const map<string, int>& var_names_, const vector<string>& param_names_) :
+	func_name(func_name_),
+	func(function_),
+	params(params_),
+	var_names(var_names_),
+	param_names(param_names_)
+{}
+
 eq_term::eq_term(const string& term_s)
 {
 	auto get_var_name = [](const string& term_s) -> string
@@ -2126,8 +2162,11 @@ eq_term::eq_term(const string& term_s)
 		{
 			if (isalpha(term_s[i]))
 			{
-				var_is_started = true;
-				var_name += term_s[i];
+				if (!(term_s[i] == 'e' && i < term_s.size() - 1 && !isalpha(term_s[i + 1])) || var_is_started)
+				{
+					var_is_started = true;
+					var_name += term_s[i];
+				}
 			}
 			else
 			{
@@ -2261,6 +2300,7 @@ Solver* CreateReadConfigFile(string file_name)
 	sol_init.max_iter_num = config["max_iter_num"].as< int >();
 	sol_init.tolerance = config["tolerance"].as< double >();
 	sol_init.gamma = config["gamma"].as< double >();
+	sol_init.free_g = config["g"].as< double >();
 
 	// Explicit/Implicit time Scheme
 	if (config["time_treat"]) {

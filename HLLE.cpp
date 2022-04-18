@@ -169,7 +169,7 @@ void HLLE::ComputeSourceTerm(const adept::adouble* cv, adept::adouble* source, i
 	for (int v = 0; v < var_num; ++v)
 		fv_ref[v] = &fv_a[v];
 
-	fill_fv_equations<adept::adouble>(fv_ref, i, true, cv);
+	fill_fv_equations<adept::adouble>(filling_type::common, fv_ref, i, true, cv);
 	for (int eq = 0; eq < eq_num; ++eq)
 		source[eq] = make_equation<adouble>(eq, Solver::equation::term_name::source, fv_ref);
 }
@@ -184,7 +184,7 @@ void HLLE::SetRHS()
 
 	for (int i = 1; i < ib2; ++i)
 	{
-		fill_fv_equations<double>(fv_ref, i);
+		fill_fv_equations<double>(filling_type::common, fv_ref, i);
 		for (int eq = 0; eq < eq_num; ++eq) {
 			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
 			rhs[eq][i] += make_equation<double>(eq, Solver::equation::term_name::source, fv_ref);
@@ -270,7 +270,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
 		fv_ref[var] = &fv_val[var];
 
-	fill_fv_equations<adouble>(fv_ref, i, true, x_);
+	fill_fv_equations<adouble>(filling_type::common, fv_ref, i, true, x_);
 
 	vector<adouble*> fv_o(var_num);
 	vector<adouble> state(var_num);
