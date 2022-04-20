@@ -363,6 +363,49 @@ void Laval6()	// Standard example as in Blazek (CUSP)
 	cout << endl << "   OK   " << endl;
 }
 
+void InitMemoryAllocation(Solver* solver, int eq_num, int imax)
+{
+	solver->cv.resize(eq_num);
+	solver->cvold.resize(eq_num);
+	solver->diss.resize(eq_num);
+	solver->rhs.resize(eq_num);
+	solver->Q_star.resize(eq_num);
+	for (int i = 0; i < eq_num; ++i) {
+		solver->cv[i].resize(imax, 0.);
+		solver->cvold[i].resize(imax, 0.);
+		solver->diss[i].resize(imax, 0.);
+		solver->rhs[i].resize(imax, 0.);
+		solver->Q_star[i].resize(imax, 0.);
+	}
+	solver->p.resize(imax, 0.);
+	solver->dt.resize(imax, 0.);
+	solver->dummy.resize((imax + 1) * (solver->var_num + 1), 0.);
+
+	if (!solver->time_expl) {
+		solver->L_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
+		solver->U_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
+		solver->D_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
+	}
+}
+
+void InitFlow(Solver* solver, double rho, double mass, double e, double p2)
+{
+	cout << "Initializing flow" << endl;
+
+	int& eq_num = solver->eq_num;
+	int& imax = solver->imax;
+
+	InitMemoryAllocation(solver, eq_num, imax);
+
+	for (int i = 0; i < imax; ++i)
+	{
+		solver->cv[solver->RHO_A][i] = rho * solver->a[i];		//	$\rho S$
+		solver->cv[solver->RHO_U_A][i] = mass;					//	$\rho u S$
+		solver->cv[solver->RHO_E_A][i] = rho * e * solver->a[i];	//	$\rho E S$
+		solver->p[i] = p2;
+	}
+}
+
 void Laval5()	// Standard example as in Blazek (CUSP)
 {
 	cout << endl << "  ---  Laval5 test  ---  " << endl;
@@ -449,7 +492,7 @@ void Laval5()	// Standard example as in Blazek (CUSP)
 	double e_ = (cpgas_ - rgas_) * t01_;		// $E = (c_{p gas} - r_{gas}) T_{01}$
 
 	// cusp_s->InverseGrid();
-	cusp_s->InitFlow(rho_, mass_, e_, p2_);
+	InitFlow(cusp_s, rho_, mass_, e_, p2_);
 	cusp_s->RhoUPH();
 	cusp_s->RefreshBoundaries();
 
@@ -752,6 +795,75 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 	cout << endl << "   OK   " << endl;
 }
 
+void InitFlowAG(Solver* solver, double* rho_, double* mass_, double* e_, double* p_, double x_, bool secondary_init)
+{
+	//cout << "Initializing flow" << endl;
+
+	int& eq_num = solver->eq_num;
+	int& imax = solver->imax;
+	Loop& grid = solver->grid;
+
+	if (!secondary_init)
+		InitMemoryAllocation(solver, eq_num, imax);
+
+	int id;
+
+	for (int i = 0; i < imax; ++i)
+	{
+		id = 0;
+		if (solver->x[i] > x_) { id = 1; }
+		double blend = (tanh((solver->x[i] - x_) * 200.) + 1.) / 2.;
+		solver->cv[solver->RHO_A][i] = secondary_init ? ((1. - blend) * rho_[0] + blend * rho_[1]) * solver->a[i] : rho_[id] * solver->a[i];		//	$\rho S$
+		solver->cv[solver->RHO_U_A][i] = secondary_init ? ((1. - blend) * mass_[0] + blend * mass_[1]) : mass_[id];					//	$\rho u S$
+		solver->cv[solver->RHO_E_A][i] = secondary_init ? ((1. - blend) * rho_[0] * e_[0] + blend * rho_[1] * e_[1]) * solver->a[i] : rho_[id] * e_[id] * solver->a[i];	//	$\rho E S$
+		solver->p[i] = p_[id];
+	}
+
+	if (!secondary_init)
+	{
+		for (unsigned int var = 0; var < solver->CONS_VAR_COUNT; ++var)
+			grid.AddColumn(solver->c_var_name[var], solver->cv[var]);
+
+		grid.CalculateResolution(1., 1., solver->c_var_name[solver->RHO_A], "coordinate");
+		grid.CalculateConcentration(1., "coordinate");
+	}
+}
+
+void CommonAdjustMesh(Solver* solver)
+{
+	auto get_var_column = [solver](string& col_name) -> vector<double>
+	{
+		if (solver->vars.contains(col_name))
+			return solver->grid.GetValues(col_name);
+		if (solver->vars_o.contains(col_name))
+			return solver->fv[solver->vars_o[col_name]];
+	};
+
+	solver->RhoUPH();
+	vector<vector<double>> funcs(solver->RemeshFuncs.size(), vector<double>(solver->grid.col_size));
+	for (int i = 0; i < solver->RemeshFuncs.size(); ++i)
+		funcs[i] = get_var_column(solver->RemeshFuncs[i]);
+
+	for (unsigned int var = 0; var < solver->CONS_VAR_COUNT; ++var)
+		solver->grid.SetRow(solver->c_var_name[var], solver->cv[var]);
+
+	solver->grid.CalculateResolution(solver->MaxX, solver->MaxF, solver->RemeshVar, "coordinate", funcs, solver->MaxOfRemeshFuncs);
+	solver->grid.CalculateConcentration(solver->MaxX, "coordinate");
+
+	solver->x = solver->grid.RefineMesh(1., 10.);
+}
+
+void AdjustMeshSod(Solver* solver, double* rho_, double* mass_, double* e_, double* p_, double x_)
+{
+	CommonAdjustMesh(solver);
+	for (unsigned int var = 0; var < solver->CONS_VAR_COUNT; ++var)
+		solver->cv[var] = solver->grid.GetValues(solver->c_var_name[var]);
+
+	InitFlowAG(solver, rho_, mass_, e_, p_, x_, true);
+	solver->RefreshBoundaries();						// Refresh boundary conditions
+	solver->RhoUPH();
+}
+
 void unsteady_sod_test(const string &output_file, const string& yml_file, const double end_time_)	// Standard example as in Blazek (CUSP)
 {
 	cout << endl << "  ---  unsteady sod test  ---  " << endl;
@@ -832,13 +944,21 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	}
 
 	double shock_pos = 0.3;
-	hllc_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+	InitFlowAG(hllc_s, rho_, mass_, e_, p_, shock_pos, false);
 
 	// Parameters to adjust mesh were used
-	for (int i = 0; i < 100 && hllc_s->remesh; ++i) {
-		hllc_s->AdjustMesh(rho_, mass_, e_, p_, shock_pos, 1.);
+	if (hllc_s->remesh)
+	{
+		hllc_s->RemeshVar = hllc_s->c_var_name[hllc_s->RHO_A];
+		hllc_s->MaxX = 1.;
+		hllc_s->MaxF = 1.;
+		hllc_s->RemeshFuncs = { };
+		hllc_s->MaxOfRemeshFuncs = { };
+		for (int i = 0; i < 100; ++i) {
+			AdjustMeshSod(hllc_s, rho_, mass_, e_, p_, shock_pos);
+		}
 	}
-	hllc_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+	InitFlowAG(hllc_s, rho_, mass_, e_, p_, shock_pos, false);
 	hllc_s->CalculateVolumes();
 	hllc_s->grid.SetRow("volume", hllc_s->vol);
 
@@ -995,26 +1115,11 @@ void Rad_function(const std::vector<std::vector<double>>& params, const vector<a
 	}
 }
 
-void AdjustMesh(Solver* solver, Loop& loop)
+void AdjustMeshSun(Solver* solver, Loop& loop)
 {
-	
-	vector<vector<double>> funcs(1, solver->grid.GetValues("T"));
-	constexpr double X_max = 12500000.;
-	constexpr double Rho_max = 1.0793596511952E-10;
-
-	solver->MaxX = X_max;
-	solver->MaxF = Rho_max;
-	solver->RemeshFuncs = funcs;
-	solver->MaxOfRemeshFuncs = { 1056100. };
-
-	solver->grid.CalculateResolution(solver->MaxX, solver->MaxF, solver->c_var_name[solver->RHO_A], "coordinate", funcs, solver->MaxOfRemeshFuncs);
-	solver->grid.CalculateConcentration(X_max, "coordinate");
-
-	solver->x = solver->grid.RefineMesh(1., 10., 1.);
+	CommonAdjustMesh(solver);
 	vector < double > ran1(solver->x);
-
 	solver->SetGrid(loop);
-
 	vector < string > ignore(1, loop.TYPE_COL);
 	vector < vector < double > > new_tab = solver->grid.NewTable("coordinate", ran1, ignore, false);
 	solver->grid.SetData(new_tab);
@@ -1036,21 +1141,7 @@ void init_sun_atmosphere(Solver* solver)
 	int imax = solver->imax;
 	int var_num = solver->var_num;
 
-	solver->cv.resize(eq_num);
-	solver->cvold.resize(eq_num);
-	solver->diss.resize(eq_num);
-	solver->rhs.resize(eq_num);
-	solver->Q_star.resize(eq_num);
-	for (int i = 0; i < eq_num; ++i) {
-		solver->cv[i].resize(imax, 0.);
-		solver->cvold[i].resize(imax, 0.);
-		solver->diss[i].resize(imax, 0.);
-		solver->rhs[i].resize(imax, 0.);
-		solver->Q_star[i].resize(imax, 0.);
-	}
-	solver->p.resize(imax, 0.);
-	solver->dt.resize(imax, 0.);
-	solver->dummy.resize((imax + 1) * (var_num + 1), 0.);
+	InitMemoryAllocation(solver, eq_num, imax);
 
 	const vector<double>& rho = solver->grid.GetValues("Rho");
 	const vector<double>& Temp = solver->grid.GetValues("T");
@@ -1069,12 +1160,6 @@ void init_sun_atmosphere(Solver* solver)
 
 	solver->grid.CalculateResolution(1., 1., solver->c_var_name[solver->RHO_A], "coordinate");
 	solver->grid.CalculateConcentration(1., "coordinate");
-
-	if (!solver->time_expl) {
-		solver->L_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		solver->U_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		solver->D_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-	}
 }
 
 void loop_foot_point(const string& output_file, const string& yml_file, const double end_time_)	// Sun loop
@@ -1161,9 +1246,16 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 
 	// Parameters to adjust mesh were used
 	if (hll->remesh)
+	{
+		hll->RemeshVar = hll->c_var_name[hll->RHO_A];
+		hll->MaxX = 12500000.;
+		hll->MaxF = 1.0793596511952E-10;
+		hll->RemeshFuncs = { "T" };
+		hll->MaxOfRemeshFuncs = { 1056100. };
 		for (int i = 0; i < 100; ++i) {
-			AdjustMesh(hll, loop);
+			AdjustMeshSun(hll, loop);
 		}
+	}
 
 	hll->CalculateVolumes();
 	hll->grid.SetRow("volume", hll->vol);

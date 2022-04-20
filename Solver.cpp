@@ -1096,20 +1096,20 @@ double Solver::SolveExplImpl(double physDt)
 			vector< vector <double> > functions;;
 			vector< double > Fs;
 			//if (iter > 1)
-			if (false)
+			//if (false)
 			{
-				//functions.push_back (cvn[RHO_A]);
-				functions.push_back (fv[TEMP]);
+				functions.push_back (cvn[RHO_A]);
+				//functions.push_back (fv[TEMP]);
 				/*functions.push_back(fv_U_new);
 				functions.push_back(fv_H_new);*/
 
-				//Fs.push_back (1e-1);
-				Fs.push_back (MaxOfRemeshFuncs[0]);
+				Fs.push_back (1e-1);
+				//Fs.push_back (MaxOfRemeshFuncs[0]);
 				/*Fs.push_back(1.);
 				Fs.push_back(1.);*/
 			}
-			grid.CalculateResolution(MaxX, MaxF, c_var_name[RHO_A], "coordinate", functions, Fs);
-			grid.CalculateConcentration(MaxX, "coordinate");
+			grid.CalculateResolution(/*MaxX*/1., /*MaxF*/1e0, c_var_name[RHO_A], "coordinate", functions, Fs);
+			grid.CalculateConcentration(/*MaxX*/1., "coordinate");
 
 			/*grid.SetRow("rho", cv1);
 			grid.SetRow("rhoU", cv2);
@@ -1128,7 +1128,7 @@ double Solver::SolveExplImpl(double physDt)
 
 			vector <string> ignore;
 			ignore.push_back("old_coords");
-			x = grid.RefineMesh(/*dt[0]*/1., 10./*tau*/, 1., ignore);
+			x = grid.RefineMesh(dt[0]/*1.*/, /*10.*/tau, 1., ignore);
 
 			for (int var = 0; var < CONS_VAR_COUNT; ++var)
 				cv[var] = grid.GetValues(c_var_name[var]);

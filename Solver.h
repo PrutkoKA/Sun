@@ -111,17 +111,17 @@ public:
 		P,
 		H,
 		A,
-		N,
+		//N,
 		TEMP,
 		DA,
 		DP,
 		DTEMP,
-		FT,
+		//FT,
 		//RAD,
-		RADFUNC,
+		//RADFUNC,
 		FIELD_VAR_COUNT
 	};
-	map < string, int > vars_o{ {"Rho", RHO}, {"U", U}, {"E", E}, {"p", P}, {"H", H}, {"A", A}, {"n", N}, {"T", TEMP}, {"dA", DA}, {"dp", DP}, {"dT", DTEMP}, {"FT", FT}/*, {"Rad", RAD}*/, {"RadFunc", RADFUNC} };
+	map < string, int > vars_o{ {"Rho", RHO}, {"U", U}, {"E", E}, {"p", P}, {"H", H}, {"A", A}/*, {"n", N}*/, {"T", TEMP}, {"dA", DA}, {"dp", DP}, {"dT", DTEMP}/*, {"FT", FT}*//*, {"Rad", RAD}*//*, {"RadFunc", RADFUNC}*/ };
 
 	map<int, string> var_name = {
 		{RHO, "Rho"},
@@ -130,14 +130,14 @@ public:
 		{P, "p"},
 		{H, "H"},
 		{A, "A"},
-		{N, "n"},
+		//{N, "n"},
 		{TEMP, "T"},
 		{DA, "dA"},
 		{DP, "dp"},
 		{DTEMP, "dT"},
-		{FT, "FT"},
+		//{FT, "FT"}
 		//{RAD, "Rad"},
-		{RADFUNC, "RadFunc"}
+		//, {RADFUNC, "RadFunc"}
 	};
 
 	enum Vars {
@@ -251,10 +251,11 @@ public:
 
 	vector < vector < double > > Q_star;
 
-	vector<vector<double>> RemeshFuncs;
+	vector<string> RemeshFuncs;
 	vector<double> MaxOfRemeshFuncs;
 	double MaxX;
 	double MaxF;
+	string RemeshVar;
 
 	vector < double > a;			///< cross sections of tube
 	vector < double > x;			///< coordinates of grid (with dummy points)

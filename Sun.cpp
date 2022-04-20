@@ -59,12 +59,12 @@ int main(int argc, char* argv[])
 
 	 //Laval4();
 
-	//Laval5();
+	Laval5();
 
 	//Laval6();		// Unsteady
 
 	string output_file = "Output/sun_loop_result.txt";
-	loop_foot_point(output_file, "Input/sun_loop.yml", 1.);
+	//loop_foot_point(output_file, "Input/sun_loop.yml", 1.);
 
 	string arg1;
 	if (argc > 1)
