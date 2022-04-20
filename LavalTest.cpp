@@ -976,22 +976,22 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	cout << endl << "   OK   " << endl;
 }
 
-void Rad_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double& result)
+void Rad_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, adept::adouble& result)
 {
 	const int T_id = var_name_ids.at(names[0]);
-	const double& T = i != -1 ? params[T_id][i] : field_var[T_id].value();
+	const adept::adouble& Temp = field_var.empty() ? params[T_id][i] : field_var[T_id];
 	constexpr double C = 3e-23;		// 3e-22 / 1e7 * 1e6 = 3e-23 [erg / cm^3 / s] -> [J / m^3 / s]
-	if (T < 2e4)
+	if (Temp < 2e4)
 	{
-		result = C * pow((0.5e4 * T), 3);
+		result = C * pow((0.5e4 * Temp), 3);
 	}
-	else if (T <= 2e5)
+	else if (Temp <= 2e5)
 	{
 		result = C;
 	}
 	else
 	{
-		result = C / sqrt(0.5e5 * T) + 2e-23 / 10. /*Si system*/ * sqrt(1e-8 * T);
+		result = C / sqrt(0.5e5 * Temp) + 2e-23 / 10. /*Si system*/ * sqrt(1e-8 * Temp);
 	}
 }
 
@@ -1147,7 +1147,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	);
 	hll->AddDelayedFvEquation({ "FT" });
 
-	hll->set_function("RadFunc", Rad_function/*, hll->fv*/, hll->vars_o, { "T" });
+	hll->set_function("RadFunc", Rad_function, hll->vars_o, { "T" });
 	//hll->set_fv_equation(		// Lam_a = 3.75e-11 * T^3
 	//	"Rad",
 	//	{ "RadFunc" }

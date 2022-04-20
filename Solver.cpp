@@ -114,9 +114,11 @@ void Solver::set_fv_equation(const string& eq_name, const vector<string>& eq_ter
 	set_fv_equation(eq_name, eq_terms);
 }
 
-void Solver::set_function(const string& func_name, custom_f function/*, const vector<vector<double>>& params*/, const map<string, int>& var_names, const vector<string>& param_names)
+void Solver::set_function(const string& func_name, 
+	custom_f function,
+	const map<string, int>& var_names, const vector<string>& param_names)
 {
-	functions.insert(pair<string, custom_func>(func_name, custom_func(func_name, function/*, params*/, var_names, param_names)));
+	functions.insert(pair<string, custom_func>(func_name, custom_func(func_name, function, var_names, param_names)));
 	set_fv_equation(
 		func_name,
 		{ func_name, "" }
@@ -228,20 +230,20 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 		}
 		else if (functions.find(var_name_) != functions.end())
 		{
-			double result(0.);		// Didn't realize how to make result templated in case of exterior function. Jacobian won't account for functions
 			v_type = eq_term::var_type::function;
 			v_id = func_name_ids.size();
 			func_name_ids[var_name_] = v_id;
 			custom_func& call = functions.at(var_name_);
 
-			vector<adept::adouble> field_var_val(field_var.size());
-			field_var_val.resize((field_var.size()));
-			for (int i = 0; i < field_var.size(); ++i)
-				field_var_val[i] = *field_var[i];
+			vector<adept::adouble> field_var_val;
+			if (arrays_are_provided)
+			{
+				field_var_val.resize(field_var.size());
+				for (int i = 0; i < field_var.size(); ++i)
+					field_var_val[i] = *field_var[i];
+			}
 
-			call.func(fv, field_var_val, vars_o, call.param_names, point, result);
-			//if (std::is_same<T, adept::adouble>::value)
-			return result;
+			return call.get_function_value<T>(fv, field_var_val, point);
 		}
 		else
 		{
@@ -272,16 +274,17 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 			return arrays_are_provided ? *field_var[v_id] : fv[v_id][point];
 		case eq_term::var_type::function:
 		{
-			double result(0.);		// Didn't realize how to make result templated in case of exterior function. Jacobian won't account for functions
 			custom_func& call = functions.at(var_name_);
 
-			vector<adept::adouble> field_var_val(field_var.size());
-			field_var_val.resize((field_var.size()));
-			for (int i = 0; i < field_var.size(); ++i)
-				field_var_val[i] = *field_var[i];
+			vector<adept::adouble> field_var_val;
+			if (arrays_are_provided)
+			{
+				field_var_val.resize(field_var.size());
+				for (int i = 0; i < field_var.size(); ++i)
+					field_var_val[i] = *field_var[i];
+			}
 
-			call.func(fv, field_var_val, vars_o, call.param_names, point, result);
-			return result;
+			return call.get_function_value<T>(fv, field_var_val, point);
 		}
 		}
 	}
@@ -2161,13 +2164,21 @@ Solver::equation::equation(string eq_name_, vector<string> dt_term_, vector<stri
 	cur_source = get_equation(eq_name, source_term);
 }
 
-Solver::custom_func::custom_func(const string& func_name_, Solver::custom_f function_, /*const vector<vector<double>>& params_,*/ const map<string, int>& var_names_, const vector<string>& param_names_) :
-	func_name(func_name_),
-	func(function_),
-	//params(params_),
-	var_names(var_names_),
-	param_names(param_names_)
-{}
+template <typename T>
+T Solver::custom_func::get_function_value(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i)
+{
+	adept::adouble result(0.);
+	func(params, params_a, var_names, param_names, i, result);
+	return result;
+}
+
+template<>
+double Solver::custom_func::get_function_value<double>(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i)
+{
+	adept::adouble result(0.);
+	func(params, params_a, var_names, param_names, i, result);
+	return result.value();
+}
 
 eq_term::eq_term(const string& term_s)
 {

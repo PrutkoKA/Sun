@@ -195,17 +195,27 @@ public:
 		pair<string, vector<eq_term>> get_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	};
 
-	using custom_f = std::function<void(const std::vector<std::vector<double>>&, const vector<adept::adouble>&, const std::map < std::string, int >&, const std::vector<std::string>&, int i, double&)>;
+	using custom_f = std::function<void(const std::vector<std::vector<double>>&, const vector<adept::adouble>&, const std::map < std::string, int >&, const std::vector<std::string>&, int i, adept::adouble&)>;
 
-	struct custom_func
+	class custom_func
 	{
+	public:
 		string func_name;
-		//const vector<vector<double>>& params;
 		const map<string, int>& var_names;
 		vector<string> param_names;
 		custom_f func;
 		
-		custom_func(const string& func_name, custom_f function/*, const vector<vector<double>>& params*/, const map<string, int>& var_names, const vector<string>& param_names);
+		custom_func(const string& func_name_,
+			custom_f function_,
+			const map<string, int>& var_names_,
+			const vector<string>& param_names_) :
+			func_name(func_name_),
+			func(function_),
+			var_names(var_names_),
+			param_names(param_names_) {};
+
+		template <typename T>
+		T get_function_value(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i);
 	};
 
 	using DiagonalFunc = std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int,
@@ -220,7 +230,8 @@ public:
 	set<string> delayed_fv_equations;
 	vector < equation > equations;
 	map<string, vector<eq_term>> fv_equation;
-	map<string, custom_func> functions;
+	
+	map<string, custom_func/*<double>*/> functions;
 
 	vector < vector < double > > cv;
 	vector < vector < double > > fv;	// field var
@@ -275,7 +286,9 @@ public:
 	template<typename T>
 	T make_fv_equation(const string& eq_name, const int point, const vector<T*>& field_var = vector<T*>(), const T* cons_var = nullptr);
 
-	void set_function(const string& func_name, custom_f function/*, const vector<vector<double>>& params*/, const map<string, int>& var_names, const vector<string>& param_names);
+	void set_function(const string& func_name, 
+		custom_f function,
+		const map<string, int>& var_names, const vector<string>& param_names);
 
 	enum class filling_type
 	{
