@@ -114,9 +114,9 @@ void Solver::set_fv_equation(const string& eq_name, const vector<string>& eq_ter
 	set_fv_equation(eq_name, eq_terms);
 }
 
-void Solver::set_function(const string& func_name, custom_f function, const vector<vector<double>>& params, const map<string, int>& var_names, const vector<string>& param_names)
+void Solver::set_function(const string& func_name, custom_f function/*, const vector<vector<double>>& params*/, const map<string, int>& var_names, const vector<string>& param_names)
 {
-	functions.insert(pair<string, custom_func>(func_name, custom_func(func_name, function, params, var_names, param_names)));
+	functions.insert(pair<string, custom_func>(func_name, custom_func(func_name, function/*, params*/, var_names, param_names)));
 	set_fv_equation(
 		func_name,
 		{ func_name, "" }
@@ -228,12 +228,19 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 		}
 		else if (functions.find(var_name_) != functions.end())
 		{
-			double result(0.);
+			double result(0.);		// Didn't realize how to make result templated in case of exterior function. Jacobian won't account for functions
 			v_type = eq_term::var_type::function;
 			v_id = func_name_ids.size();
 			func_name_ids[var_name_] = v_id;
 			custom_func& call = functions.at(var_name_);
-			call.func(fv, vars_o, call.param_names, point, result);
+
+			vector<adept::adouble> field_var_val(field_var.size());
+			field_var_val.resize((field_var.size()));
+			for (int i = 0; i < field_var.size(); ++i)
+				field_var_val[i] = *field_var[i];
+
+			call.func(fv, field_var_val, vars_o, call.param_names, point, result);
+			//if (std::is_same<T, adept::adouble>::value)
 			return result;
 		}
 		else
@@ -265,9 +272,15 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 			return arrays_are_provided ? *field_var[v_id] : fv[v_id][point];
 		case eq_term::var_type::function:
 		{
-			double result(0.);
+			double result(0.);		// Didn't realize how to make result templated in case of exterior function. Jacobian won't account for functions
 			custom_func& call = functions.at(var_name_);
-			call.func(fv, vars_o, call.param_names, point, result);
+
+			vector<adept::adouble> field_var_val(field_var.size());
+			field_var_val.resize((field_var.size()));
+			for (int i = 0; i < field_var.size(); ++i)
+				field_var_val[i] = *field_var[i];
+
+			call.func(fv, field_var_val, vars_o, call.param_names, point, result);
 			return result;
 		}
 		}
@@ -1080,16 +1093,20 @@ double Solver::SolveExplImpl(double physDt)
 			vector< vector <double> > functions;;
 			vector< double > Fs;
 			//if (iter > 1)
+			if (false)
 			{
-				functions.push_back (cvn[RHO_A]);
+				//functions.push_back (cvn[RHO_A]);
+				functions.push_back (fv[TEMP]);
 				/*functions.push_back(fv_U_new);
 				functions.push_back(fv_H_new);*/
-				Fs.push_back (1e-1);
+
+				//Fs.push_back (1e-1);
+				Fs.push_back (MaxOfRemeshFuncs[0]);
 				/*Fs.push_back(1.);
 				Fs.push_back(1.);*/
 			}
-			grid.CalculateResolution(1., 1e0, c_var_name[RHO_A], "coordinate", functions, Fs);
-			grid.CalculateConcentration(1., "coordinate");
+			grid.CalculateResolution(MaxX, MaxF, c_var_name[RHO_A], "coordinate", functions, Fs);
+			grid.CalculateConcentration(MaxX, "coordinate");
 
 			/*grid.SetRow("rho", cv1);
 			grid.SetRow("rhoU", cv2);
@@ -1108,7 +1125,7 @@ double Solver::SolveExplImpl(double physDt)
 
 			vector <string> ignore;
 			ignore.push_back("old_coords");
-			x = grid.RefineMesh(dt[0], tau, 1., ignore);
+			x = grid.RefineMesh(/*dt[0]*/1., 10./*tau*/, 1., ignore);
 
 			for (int var = 0; var < CONS_VAR_COUNT; ++var)
 				cv[var] = grid.GetValues(c_var_name[var]);
@@ -2144,10 +2161,10 @@ Solver::equation::equation(string eq_name_, vector<string> dt_term_, vector<stri
 	cur_source = get_equation(eq_name, source_term);
 }
 
-Solver::custom_func::custom_func(const string& func_name_, Solver::custom_f function_, const vector<vector<double>>& params_, const map<string, int>& var_names_, const vector<string>& param_names_) :
+Solver::custom_func::custom_func(const string& func_name_, Solver::custom_f function_, /*const vector<vector<double>>& params_,*/ const map<string, int>& var_names_, const vector<string>& param_names_) :
 	func_name(func_name_),
 	func(function_),
-	params(params_),
+	//params(params_),
 	var_names(var_names_),
 	param_names(param_names_)
 {}

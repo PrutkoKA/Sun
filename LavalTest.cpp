@@ -976,11 +976,11 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	cout << endl << "   OK   " << endl;
 }
 
-void Rad_function(const std::vector<std::vector<double>>& params, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double& result)
+void Rad_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double& result)
 {
 	const int T_id = var_name_ids.at(names[0]);
-	const double& T = params[T_id][i];
-	constexpr double C = 3e-22;
+	const double& T = i != -1 ? params[T_id][i] : field_var[T_id].value();
+	constexpr double C = 3e-23;		// 3e-22 / 1e7 * 1e6 = 3e-23 [erg / cm^3 / s] -> [J / m^3 / s]
 	if (T < 2e4)
 	{
 		result = C * pow((0.5e4 * T), 3);
@@ -991,7 +991,7 @@ void Rad_function(const std::vector<std::vector<double>>& params, const std::map
 	}
 	else
 	{
-		result = C / sqrt(0.5e5 * T) + 2e-23 * sqrt(1e-8 * T);
+		result = C / sqrt(0.5e5 * T) + 2e-23 / 10. /*Si system*/ * sqrt(1e-8 * T);
 	}
 }
 
@@ -1001,7 +1001,13 @@ void AdjustMesh(Solver* solver, Loop& loop)
 	vector<vector<double>> funcs(1, solver->grid.GetValues("T"));
 	constexpr double X_max = 12500000.;
 	constexpr double Rho_max = 1.0793596511952E-10;
-	solver->grid.CalculateResolution(X_max, Rho_max, solver->c_var_name[solver->RHO_A], "coordinate", funcs, { 1056100. });
+
+	solver->MaxX = X_max;
+	solver->MaxF = Rho_max;
+	solver->RemeshFuncs = funcs;
+	solver->MaxOfRemeshFuncs = { 1056100. };
+
+	solver->grid.CalculateResolution(solver->MaxX, solver->MaxF, solver->c_var_name[solver->RHO_A], "coordinate", funcs, solver->MaxOfRemeshFuncs);
 	solver->grid.CalculateConcentration(X_max, "coordinate");
 
 	solver->x = solver->grid.RefineMesh(1., 10., 1.);
@@ -1137,11 +1143,11 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	);
 	hll->set_fv_equation(		// FT = 10e-6 * T^2.5 * dT
 		"FT",
-		{ "1e-6T^2.5", "*dT", "" }
+		{ "1e-9T^2.5", "*dT", "" }	// 1e-6 / 1e7 * 1e4 = 1e-9 [erg / cm^2 / s] -> [J / m^2 / s]
 	);
 	hll->AddDelayedFvEquation({ "FT" });
 
-	hll->set_function("RadFunc", Rad_function, hll->fv, hll->vars_o, { "T" });
+	hll->set_function("RadFunc", Rad_function/*, hll->fv*/, hll->vars_o, { "T" });
 	//hll->set_fv_equation(		// Lam_a = 3.75e-11 * T^3
 	//	"Rad",
 	//	{ "RadFunc" }
@@ -1155,16 +1161,14 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 
 	// Parameters to adjust mesh were used
 	if (hll->remesh)
-		for (int i = 0; i < 200; ++i) {
+		for (int i = 0; i < 100; ++i) {
 			AdjustMesh(hll, loop);
 		}
 
 	hll->CalculateVolumes();
 	hll->grid.SetRow("volume", hll->vol);
 
-	hll->grid.PrintTable("Output/sun_table.txt");
-
-	return;
+	//hll->grid.PrintTable("Output/sun_table.txt");
 
 	hll->RhoUPH();
 	hll->RefreshBoundaries();
