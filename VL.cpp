@@ -138,46 +138,7 @@ void VL::LRState(string var_)
 
 void VL::LRState(vector < vector < double > >& cv_, vector < vector < double > >& ls_, vector < vector < double > >& rs_)
 {
-	vector < double > dummy_((imax + 1) * var_num, 0.);
-	vector < vector < double > > fv_(var_num, vector < double >(imax, 0.));
-	double af, bf;
-	double delt_l, delt_r;
-	double* d1 = dummy_.data() + 1;
-
-	RhoUPH(cv_, fv_);
-
-
-	// first differences of rho, u, p
-
-	for (int i = 0; i < ib2; ++i)
-	{
-		for (int eq = 0; eq < var_num; ++eq) {
-			d1[eq * (imax + 1) + i] = fv_[eq][i + 1] - fv_[eq][i];
-		}
-	}
-	for (int eq = 0; eq < var_num; ++eq) {
-		d1[eq * (imax + 1) - 1] = d1[eq * (imax + 1) + 0];
-		d1[eq * (imax + 1) + imax - 1] = d1[eq * (imax + 1) + ib2 - 1];
-	}
-
-	// left / right state
-
-	for (int i = 0; i < ib2; ++i)
-	{
-		for (int eq = 0; eq < var_num; ++eq) {
-			delt_l = MUSCL0(d1[eq * (imax + 1) + i], d1[eq * (imax + 1) + i - 1], x[i + 1] - x[i]);
-			delt_r = MUSCL0(d1[eq * (imax + 1) + i + 1], d1[eq * (imax + 1) + i], x[i + 1] - x[i]);
-
-			rs_[eq][i] = fv_[eq][i + 1] - 0.5 * delt_r;
-			ls_[eq][i] = fv_[eq][i + 0] + 0.5 * delt_l;
-		}
-		//rs_[2][i] = max(rs_[2][i], 1e-20);
-		//ls_[2][i] = max(ls_[2][i], 1e-20);
-	}
-	for (int eq = 0; eq < var_num; ++eq) {
-		rs_[eq][ib2] = rs_[eq][ib2-1];
-		ls_[eq][ib2] = ls_[eq][ib2 - 1];
-	}
+	// Do nothing
 }
 
 // CUSPLIM = original CUSP (SLIP) limiter (Eq. (4.121))

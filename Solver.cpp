@@ -46,7 +46,7 @@ Solver::Solver(sol_struct& sol_init_) :
 	if (false)
 	{
 		make_fv_equation<adept::adouble>(var_name[0], 0);	// To resolve adouble template in HLLE. Whaaat?? It even may be not executed.
-		make_equation<double>(RHO_A, Solver::equation::term_name::dt, vector<double*>());
+		make_equation<double>(0, Solver::equation::term_name::dt, vector<double*>());
 		vector<adept::adouble*> b;
 		fill_fv_equations<adept::adouble>(filling_type::common, b, 0);
 	}
@@ -192,7 +192,7 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 	bool arrays_are_provided = cons_var || !fv_eq;
 	if (v_type == eq_term::var_type::not_defined)
 	{
-		if (var_name_ == var_name[A])
+		if (var_name_ == var_name[g_A])
 		{
 			v_type = eq_term::var_type::area;
 			return (arrays_are_provided ? 1. : a[point]);
@@ -388,9 +388,10 @@ void Solver::compute_differential_var(int i, const vector<int>& skipped, vector<
 template<typename T>
 void Solver::fill_fv_underneath(const filling_type& f_type, int i, vector<T*>& fv_new, vector<int>& skipped, bool compute_differential, const T* cons_var)
 {
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	for (int var = 0; var < var_num; ++var)
 	{
-		bool is_diff = var_name[var][0] == 'd';
+		string& v_name = var_name[var];
+		bool is_diff = v_name[0] == 'd';
 		if (is_diff && f_type != filling_type::only_vars)
 		{
 			if (compute_differential)
@@ -401,13 +402,13 @@ void Solver::fill_fv_underneath(const filling_type& f_type, int i, vector<T*>& f
 		}
 		if (!is_diff && f_type != filling_type::only_diff)
 		{
-			if (f_type == filling_type::only_vars && delayed_fv_equations.contains(var_name[var]))
+			if (f_type == filling_type::only_vars && delayed_fv_equations.contains(v_name))
 				continue;
 
-			if (var_name[var] == var_name[A])
+			if (var == g_A)
 				*fv_new[var] = a[i];
 			else
-				*fv_new[var] = make_fv_equation<T>(var_name[var], i, fv_new, cons_var);
+				*fv_new[var] = make_fv_equation<T>(v_name, i, fv_new, cons_var);
 		}
 	}
 }
@@ -556,72 +557,6 @@ void Solver::InitFlow(double* rho_, double* mass_, double* e_, double* p_, doubl
 	}
 }
 
-void Solver::InitFlowAG2(double* rho_, double* mass_, double* e_, double* p_, double x_)
-{
-	int id;
-
-	for (int i = 0; i < imax; ++i)
-	{
-		id = 0;
-		if (x[i] > x_) { id = 1; }
-		double blend = (tanh((x[i] - x_) * 200.) + 1.) / 2.;
-		cv[RHO_A][i] = ((1. - blend) * rho_[0] + blend * rho_[1]) * a[i];		//	$\rho S$
-		cv[RHO_U_A][i] = ((1. - blend) * mass_[0] + blend * mass_[1]);					//	$\rho u S$
-		cv[RHO_E_A][i] = ((1. - blend) * rho_[0] * e_[0] + blend * rho_[1] * e_[1]) * a[i];	//	$\rho E S$
-		p[i] = p_[id];
-	}
-}
-
-void Solver::InitFlowAG(double* rho_, double* mass_, double* e_, double* p_, double x_)
-{
-	cout << "Initializing flow" << endl;
-
-	vector < double > Res, Conc;
-
-	cv.resize(eq_num);
-	cvold.resize(eq_num);
-	diss.resize(eq_num);
-	rhs.resize(eq_num);
-	Q_star.resize(eq_num);
-	for (int i = 0; i < eq_num; ++i) {
-		cv[i].resize(imax, 0.);
-		cvold[i].resize(imax, 0.);
-		diss[i].resize(imax, 0.);
-		rhs[i].resize(imax, 0.);
-		Q_star[i].resize(imax, 0.);
-	}
-	p.resize(imax, 0.);
-	dt.resize(imax, 0.);
-	dummy.resize((imax + 1) * (var_num + 1), 0.);
-
-	int id;
-
-	for (int i = 0; i < imax; ++i)
-	{
-		id = 0;
-		if (x[i] > x_) { id = 1; }
-		cv[RHO_A][i] = rho_[id] * a[i];		//	$\rho S$
-		cv[RHO_U_A][i] = mass_[id];					//	$\rho u S$
-		cv[RHO_E_A][i] = rho_[id] * e_[id] * a[i];	//	$\rho E S$
-		p[i] = p_[id];
-	}
-
-	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
-		grid.AddColumn(c_var_name[var], cv[var]);
-
-	grid.CalculateResolution(1., 1., c_var_name[RHO_A], "coordinate");
-	grid.CalculateConcentration(1., "coordinate");
-	Res = grid.GetResolution();
-	Conc = grid.GetConcentration();
-	double alpha_ = grid.GetAlpha();
-
-	if (!time_expl) {
-		L_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		U_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-		D_SGS.resize(imax + 1, MatrixXd(eq_num, eq_num));
-	}
-}
-
 void Solver::ResetDummy()
 {
 	dummy.assign(dummy.size(), 0.);
@@ -644,7 +579,6 @@ void Solver::RefreshBoundaries()
 	double rho;
 	double cs;
 
-
 	int in_id = GetInflowId();
 	in_id = (in_id > 0 ? in_id - 1 : in_id);
 	int in_id_p1 = (in_id > 0 ? in_id - 1 : in_id + 1);
@@ -659,8 +593,8 @@ void Solver::RefreshBoundaries()
 	if (b_type == "dirichlet") {
 		// Inflow boundaries
 		rgas = gam1 * Cp / gamma;
-		u = fv[U][in_id_p1]; // cv[1][in_id_p1] / cv[0][in_id_p1];		///< $u = \frac{(\rho u S)_{[1]}} {(\rho  S)_{[1]}}$
-		cs2 = gamma * fv[P][in_id_p1] / fv[RHO][in_id_p1]; // p[in_id_p1] * a[in_id_p1] / cv[0][in_id_p1];	// Speed of sound $c_s^2 = \frac{\gamma_ p_{[1]} S_{[1]}} { \rho  S_{[1]}}$
+		u = fv[g_U][in_id_p1]; // cv[1][in_id_p1] / cv[0][in_id_p1];		///< $u = \frac{(\rho u S)_{[1]}} {(\rho  S)_{[1]}}$
+		cs2 = gamma * fv[g_P][in_id_p1] / fv[g_RHO][in_id_p1]; // p[in_id_p1] * a[in_id_p1] / cv[0][in_id_p1];	// Speed of sound $c_s^2 = \frac{\gamma_ p_{[1]} S_{[1]}} { \rho  S_{[1]}}$
 		c02 = cs2 + 0.5 * gam1 * u * u;			// Stagnation speed of sound$c_0^2 = c_s^2 + 0.5 (\gamma_ - 1) u^2$
 		rinv = abs(u) - 2. * sqrt(cs2) / gam1;		// Riemann invariant $R^-$, $r_{inv} = u - 2 \frac{\sqrt{c_s^2}}{\gamma_ - 1} $ 		// fix is here
 		dis = gap1 * c02 / (gam1 * rinv * rinv) - 0.5 * gam1;	// $dis = \frac{(\gamma_ + 1) c_0^2}{(\gamma_ - 1) r_{inv}^2}$
@@ -674,17 +608,17 @@ void Solver::RefreshBoundaries()
 		rhob = pb / (rgas * tb);		//  $\rho_b = \frac{p_b}{r_{gas} T_b}$
 		ub = Sign(u) * sqrt(2. * Cp * (T_b_in - tb));		// $u_b = \sqrt{2 c_{p, gas} \left(T_{01} - T_b\right)}$ 		// fix is here
 
-		cv[RHO_A][in_id] = rhob * a[in_id_p1];		//	$\rho S = \rho_b S_{[1]}$
-		cv[RHO_U_A][in_id] = rhob * a[in_id_p1] * ub;					//	$\rho u S = \rho_b S_{[1]} u_b$
-		cv[RHO_E_A][in_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[in_id_p1];	//	$\rho E S = \left(\frac{p_b}{\gamma_ - 1} + 0.5 \rho_b u_b^2\right) S_{[1]}$
+		cv[g_RHO_A][in_id] = rhob * a[in_id_p1];		//	$\rho S = \rho_b S_{[1]}$
+		cv[g_RHO_U_A][in_id] = rhob * a[in_id_p1] * ub;					//	$\rho u S = \rho_b S_{[1]} u_b$
+		cv[g_RHO_E_A][in_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[in_id_p1];	//	$\rho E S = \left(\frac{p_b}{\gamma_ - 1} + 0.5 \rho_b u_b^2\right) S_{[1]}$
 		p[in_id] = pb;
 
 		// Outflow boundaries
 
 		
 
-		rho = fv[RHO][out_id_p1]; // cv[0][out_id_p1] / a[out_id_p1];
-		u = fv[U][out_id_p1]; // cv[1][out_id_p1] / cv[0][out_id_p1];
+		rho = fv[g_RHO][out_id_p1]; // cv[0][out_id_p1] / a[out_id_p1];
+		u = fv[g_U][out_id_p1]; // cv[1][out_id_p1] / cv[0][out_id_p1];
 		cs = sqrt(gamma * p[out_id_p1] / rho);
 
 		if (abs(u) >= cs) {		// supersonic flow 		// fix is here
@@ -698,26 +632,23 @@ void Solver::RefreshBoundaries()
 			ub = u - Sign(u) * (p_b_out - p[out_id_p1]) / (cs * rho);		// $u_b = u - \frac{(p_2 - p_{[ib2 - 1]})}{c_s \rho}$ 		// fix is here
 		}
 
-		cv[RHO_A][out_id] = rhob * a[out_id_p1];
-		cv[RHO_U_A][out_id] = rhob * ub * a[out_id_p1];
-		cv[RHO_E_A][out_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[out_id_p1];
+		cv[g_RHO_A][out_id] = rhob * a[out_id_p1];
+		cv[g_RHO_U_A][out_id] = rhob * ub * a[out_id_p1];
+		cv[g_RHO_E_A][out_id] = (pb / gam1 + 0.5 * rhob * ub * ub) * a[out_id_p1];
 		p[out_id] = pb;
 	}
 	if (b_type == "transmissive")
 	{
 		double sigma = 1.;
-		cv[RHO_A][in_id] = cv[RHO_A][in_id_p1] * sigma * 1;
-		cv[RHO_U_A][in_id] = cv[RHO_U_A][in_id_p1] * sigma * 1;
-		cv[RHO_E_A][in_id] = cv[RHO_E_A][in_id_p1] * sigma * 1;
+		for (int eq = 0; eq < eq_num; ++eq)
+			cv[eq][in_id] = cv[eq][in_id_p1];
 
-		p[in_id] = (gamma - 1.) * (cv[RHO_E_A][in_id] / a[in_id] - 0.5 * cv[RHO_U_A][in_id] * cv[RHO_U_A][in_id] / (cv[RHO_A][in_id] * a[in_id]));
+		p[in_id] = (gamma - 1.) * (cv[g_RHO_E_A][in_id] / a[in_id] - 0.5 * cv[g_RHO_U_A][in_id] * cv[g_RHO_U_A][in_id] / (cv[g_RHO_A][in_id] * a[in_id]));
 
+		for (int eq = 0; eq < eq_num; ++eq)
+			cv[eq][out_id] = cv[eq][out_id_p1] * sigma;
 
-		cv[RHO_A][out_id] = cv[RHO_A][out_id_p1] * sigma;
-		cv[RHO_U_A][out_id] = cv[RHO_U_A][out_id_p1] * sigma;
-		cv[RHO_E_A][out_id] = cv[RHO_E_A][out_id_p1] * sigma;
-
-		p[out_id] = (gamma - 1.) * (cv[RHO_E_A][out_id] / a[out_id] - 0.5 * cv[RHO_U_A][out_id] * cv[RHO_U_A][out_id] / (cv[RHO_A][out_id] * a[out_id]));
+		p[out_id] = (gamma - 1.) * (cv[g_RHO_E_A][out_id] / a[out_id] - 0.5 * cv[g_RHO_U_A][out_id] * cv[g_RHO_U_A][out_id] / (cv[g_RHO_A][out_id] * a[out_id]));
 	}
 	//cv[N_A][0] = cv[N_A][1];
 	//cv[N_A][imax - 1] = cv[N_A][ib2 - 1];
@@ -960,12 +891,7 @@ double Solver::ForwardEuler(double physDt)
 
 void Solver::UpdateP(int i)
 {
-	double rrho, rhou, rhoe;
-
-	rrho = a[i] / cv[RHO_A][i];
-	rhou = cv[RHO_U_A][i] / a[i];
-	rhoe = cv[RHO_E_A][i] / a[i];
-	p[i] = (gamma - 1.) * (rhoe - 0.5 * rhou * rhou * rrho);
+	p[i] = make_fv_equation<double>(var_name[g_P], i);
 	p[i] = max(p[i], 1e-20);
 }
 
@@ -1087,7 +1013,7 @@ double Solver::SolveExplImpl(double physDt)
 		RhoUPH();
 
 		for (int i = 0; i < 1; ++i) {
-			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+			for (int var = 0; var < eq_num; ++var)
 				grid.SetRow(c_var_name[var], cv[var]);
 
 			vector< vector <double> > functions;
@@ -1119,7 +1045,7 @@ double Solver::SolveExplImpl(double physDt)
 			ignore.push_back("old_coords");
 			x = grid.RefineMesh(dt[0], tau, 1., ignore);
 
-			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+			for (int var = 0; var < eq_num; ++var)
 				cv[var] = grid.GetValues(c_var_name[var]);
 
 			RefreshBoundaries();						// Refresh boundary conditions
@@ -1140,7 +1066,7 @@ double Solver::SolveExplImpl(double physDt)
 		for (auto it : cvs)
 		{
 			grid.SetRow("coordinate", old_coords_v[i]);
-			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+			for (int var = 0; var < eq_num; ++var)
 				grid.SetRow(c_var_name[var], cvs_old[i][var]);
 			++i;
 
@@ -1151,12 +1077,12 @@ double Solver::SolveExplImpl(double physDt)
 			new_tab = grid.NewTable("coordinate", x, ignore, false);
 			grid.SetData(new_tab);
 
-			for (int var = 0; var < CONS_VAR_COUNT; ++var)
+			for (int var = 0; var < eq_num; ++var)
 				(*it)[var] = grid.GetValues(c_var_name[var]);
 		}
 
 		grid.SetRow("coordinate", x);
-		for (int var = 0; var < CONS_VAR_COUNT; ++var)
+		for (int var = 0; var < eq_num; ++var)
 			grid.SetRow(c_var_name[var], cv[var]);
 
 		calculate_mass_matrix();
@@ -1164,27 +1090,6 @@ double Solver::SolveExplImpl(double physDt)
 	}
 
 	return Convergence();
-}
-
-void Solver::AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef)
-{
-	InitFlowAG2(rho_, mass_, e_, p_, x_);
-
-	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
-		grid.SetRow(c_var_name[var], cv[var]);
-
-	grid.CalculateResolution(1., 1., c_var_name[RHO_A], "coordinate");
-	grid.CalculateConcentration(1., "coordinate");
-
-	x = grid.RefineMesh(1., 10., relax_coef);
-
-	for (unsigned int var = 0; var < CONS_VAR_COUNT; ++var)
-		cv[var] = grid.GetValues(c_var_name[var]);
-
-	InitFlowAG2(rho_, mass_, e_, p_, x_);
-
-	RefreshBoundaries();						// Refresh boundary conditions
-	RhoUPH();
 }
 
 void Solver::RHSProcessing(vector < vector < vector < double > > >& rhsstage, int rks, double physDt, vector < vector < double > >& rhsold)
@@ -1845,25 +1750,6 @@ void Solver::RhoUPH()
 		}
 }
 
-void Solver::RhoUPH(vector < vector < double > >& cv_, vector < vector < double > >& fv_)
-{
-	double gamma_ = GetGamma();
-	double rrho, rhou, rhoe;
-
-	for (int i = 0; i < imax; ++i)
-	{
-		rrho = a[i] / cv_[RHO_A][i];
-		rhou = cv_[RHO_U_A][i] / a[i];
-		rhoe = cv_[RHO_E_A][i] / a[i];
-		//p_[i] = (gamma_ - 1.) * (rhoe - 0.5 * rhou * rhou * rrho);
-
-		fv_[RHO][i] = cv_[0][i] / a[i];
-		fv_[U][i] = cv_[1][i] / cv_[0][i];
-		fv_[P][i] = (gamma_ - 1.) * (rhoe - 0.5 * rhou * rhou * rrho);
-		fv_[H][i] = gamma_ / (gamma_ - 1.) * fv_[P][i] / fv_[RHO][i] + 0.5 * pow(fv_[U][i], 2);
-	}
-}
-
 void Solver::TimeSteps(bool local_time, double dt_)		// Blazek, Section 6.1.4, p. 173, "Determination of the maximum time step"
 {
 	double rho;
@@ -1883,9 +1769,9 @@ void Solver::TimeSteps(bool local_time, double dt_)		// Blazek, Section 6.1.4, p
 	}
 	for (int i = 1; i < ib2; ++i)
 	{
-		rho = make_fv_equation<double>(var_name[RHO], i);
-		u = make_fv_equation<double>(var_name[U], i);
-		p = make_fv_equation<double>(var_name[P], i);
+		rho = make_fv_equation<double>(var_name[g_RHO], i);
+		u = make_fv_equation<double>(var_name[g_U], i);
+		p = make_fv_equation<double>(var_name[g_P], i);
 		cs = sqrt(gamma * p / rho);
 		dx = 0.5 * (x[i + 1] - x[i - 1]);
 		sprad = cs * sqrt(dx * dx + pow(a[i], 2)) + abs(u) * a[i];
@@ -1909,13 +1795,17 @@ double Solver::SpectralRadius(vector< vector < double > >& cv_, int i)
 	double cs;
 	double rhoe;
 
-	rho = cv_[RHO_A][i] / a[i];
-	u = cv_[RHO_U_A][i] / cv_[RHO_A][i];
-	rhoe = cv_[RHO_E_A][i] / a[i];
+	vector<double> cons_var(eq_num);
+	for (int eq = 0; eq < eq_num; ++eq)
+		cons_var[eq] = cv_[eq][i];
+
+	double a = make_fv_equation<double>(var_name[g_A], i, vector<double*>(), cons_var.data());
+	rho = make_fv_equation<double>(var_name[g_RHO_A], i, vector<double*>(), cons_var.data()) / a;
+	u = make_fv_equation<double>(var_name[g_RHO_U_A], i, vector<double*>(), cons_var.data()) / rho / a;
+	rhoe = make_fv_equation<double>(var_name[g_RHO_E_A], i, vector<double*>(), cons_var.data()) / a;
 	cs = sqrt(gamma * (gamma - 1.) * (rhoe - 0.5 * rho * u * u) / rho);
 
-	//return cs * sqrt(dx * dx + pow(a[i], 2)) + abs(u) * a[i];
-	return (cs  + abs(u)) * a[i];
+	return (cs  + abs(u)) * a;
 }
 
 void Solver::SourceTerm(int i)
@@ -2014,18 +1904,18 @@ double Solver::Convergence()
 
 	for (int i = 1; i < ib2; ++i)
 	{
-		dr = cv[RHO_A][i] - cvold[RHO_A][i];
+		dr = cv[g_RHO_A][i] - cvold[g_RHO_A][i];
 		//dn = cv[N_A][i] - cvold[N_A][i];
 
-		avms = avms + cv[RHO_U_A][i];
+		avms = avms + cv[g_RHO_U_A][i];
 		drho = drho + dr * dr;
 		//dconc = dconc + dn * dn;
 		if (abs(dr) >= drmax) {
 			drmax = abs(dr);
 			idrho = i;
 		}
-		rho = fv[RHO][i];		// cv[RHO_A][i] / a[i];
-		u = fv[U][i];			// cv[RHO_U_A][i] / cv[RHO_A][i];
+		rho = fv[g_RHO][i];		// cv[RHO_A][i] / a[i];
+		u = fv[g_U][i];			// cv[RHO_U_A][i] / cv[RHO_A][i];
 		c = sqrt(gamma* p[i] / rho);
 		if (u > c) nsup++;
 		if (u / c > M_max) M_max = u / c;
@@ -2094,13 +1984,13 @@ void Solver::PrintResult()
 	fprintf(file, "\n");
 	for (int i = 1; i < ib2; ++i)
 	{
-		rho = fv[RHO][i]; // cv[0][i] / a[i];
-		u = fv[U][i]; // cv[1][i] / cv[0][i];
-		temp = p[i] / (rgas * rho);
+		rho = fv[g_RHO][i]; // cv[0][i] / a[i];
+		u = fv[g_U][i]; // cv[1][i] / cv[0][i];
+		temp = make_fv_equation<double>("T", i); // p[i] / (rgas * rho);
 		c = sqrt(gamma * p[i] / rho);
 		mach = /*abs*/(u) / c;
-		fprintf(file, "%14.10lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf", 
-			x[i], a[i], rho, u, p[i], temp, mach, cv[RHO_U_A][i]);
+		fprintf(file, "%14.10le\t%le\t%le\t%le\t%le\t%le\t%le\t%le", 
+			x[i], a[i], rho, u, p[i], temp, mach, cv[g_RHO_U_A][i]);
 
 		//if (AG) {
 		//	fprintf(file, "\t%lf", fv[n][i]/* / grid.GetResolution()[i]*/);

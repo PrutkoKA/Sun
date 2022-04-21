@@ -101,9 +101,20 @@ class Solver
 {
 public:
 	const double k_planc = 6.626e-34;
+	int g_RHO = -1, g_U = -1, g_P = -1, g_H = -1, g_E = -1, g_A = -1;
+	int g_RHO_A = -1, g_RHO_U_A = -1, g_RHO_E_A = -1;
 
 	map<string, int> func_name_ids;
-	map < string, int > vars{ {"RhoA", 0}, {"RhoUA", 1}, {"RhoEA", 2} };
+
+	enum Vars {
+		RHO_A,
+		RHO_U_A,
+		RHO_E_A,
+		CONS_VAR_COUNT
+	};
+	map < string, int > vars;
+	map<int, string> c_var_name;
+
 	enum Vars_o {
 		RHO,
 		U,
@@ -121,37 +132,8 @@ public:
 		//RADFUNC,
 		FIELD_VAR_COUNT
 	};
-	map < string, int > vars_o{ {"Rho", RHO}, {"U", U}, {"E", E}, {"p", P}, {"H", H}, {"A", A}/*, {"n", N}*/, {"T", TEMP}, {"dA", DA}, {"dp", DP}, {"dT", DTEMP}/*, {"FT", FT}*//*, {"Rad", RAD}*//*, {"RadFunc", RADFUNC}*/ };
-
-	map<int, string> var_name = {
-		{RHO, "Rho"},
-		{U, "U"},
-		{E, "E"},
-		{P, "p"},
-		{H, "H"},
-		{A, "A"},
-		//{N, "n"},
-		{TEMP, "T"},
-		{DA, "dA"},
-		{DP, "dp"},
-		{DTEMP, "dT"}
-		//, {FT, "FT"}
-		//{RAD, "Rad"},
-		//, {RADFUNC, "RadFunc"}
-	};
-
-	enum Vars {
-		RHO_A,
-		RHO_U_A,
-		RHO_E_A,
-		CONS_VAR_COUNT
-	};
-
-	map<int, string> c_var_name = { 
-		{RHO_A, "RhoA"},
-		{RHO_U_A, "RhoUA"},
-		{RHO_E_A, "RhoEA"}
-	};
+	map < string, int > vars_o;
+	map<int, string> var_name;
 
 	double omega = 1.;
 	double beta = 2;
@@ -302,13 +284,9 @@ public:
 	template<typename T>
 	void fill_fv_equations(const filling_type& f_type, vector<T*>& fv_a, int i, bool compute_differential = true, const T* x_ = nullptr);
 
-	void AdjustMesh(double* rho_, double* mass_, double* e_, double* p_, double x_, double relax_coef);
-
 	void ReadBoundaries(string file_name);		///< Reading Boundary file
 	void InitFlow(double rho, double mass, double e, double p2);
 	void InitFlow(double* rho_, double* mass_, double* e_, double* p_, double x_);
-	void InitFlowAG2(double* rho_, double* mass_, double* e_, double* p_, double x_);
-	void InitFlowAG(double* rho_, double* mass_, double* e_, double* p_, double x_);
 	void ResetDummy();
 	void RefreshBoundaries();
 	void SetGasType(bool gas);		///< Sets gas type. true - Ideal, false - not Ideal
@@ -388,7 +366,6 @@ public:
 	virtual void Fluxes() = 0;
 	virtual void RHS(int i) = 0;
 	void RhoUPH();
-	void RhoUPH(vector < vector < double > > & cv_, vector < vector < double > > & fv_);
 	void TimeSteps(bool local_time = true, double dt_ = 0.);
 	double SpectralRadius(vector< vector < double > >& cv_, int i);
 	void SourceTerm(int i);

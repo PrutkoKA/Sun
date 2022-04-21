@@ -28,6 +28,10 @@
 //double uref;
 //double pref;
 
+void InitFlowAG(Solver* solver, double* rho_, double* mass_, double* e_, double* p_, double x_, bool secondary_init);
+void AdjustMeshSod(Solver* solver, double* rho_, double* mass_, double* e_, double* p_, double x_);
+void DefineVariables(Solver* solver, vector<string>& cvars_names, vector<string>& vars_names);
+
 void Laval2();
 
 void Laval3();

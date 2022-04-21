@@ -434,6 +434,10 @@ void Laval5()	// Standard example as in Blazek (CUSP)
 	// cusp_s->HideOutput();
 	// cusp_s->InverseGrid();
 
+	vector<string> cvars_names{ "RhoA", "RhoUA", "RhoEA" };
+	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "T", "dA", "dp", "dT" };
+	DefineVariables(cusp_s, cvars_names, vars_names);
+
 	// Euler euqations
 	cusp_s->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, cusp_s->vars, cusp_s->vars_o);	// RhoA, RhoUA
 	cusp_s->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "-p", "*dA" }, cusp_s->vars, cusp_s->vars_o);		// RhoUA, (RhoUU+p)A
@@ -586,7 +590,7 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 
 	// cusp_s->InverseGrid();
 	double shock_pos = 0.3;
-	cusp_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+	InitFlowAG(cusp_s, rho_, mass_, e_, p_, shock_pos, false);
 
 	FILE* file;
 	file = fopen("Output/RemeshedCoords.txt", "w");
@@ -600,10 +604,10 @@ void Laval7()	// Standard example as in Blazek (CUSP)
 			: i < 1700 ? 0.05
 			: i < 2000 ? 0.05 
 			: i < 5000 ? 0.02 : 0.005;
-		cusp_s->AdjustMesh(rho_, mass_, e_, p_, shock_pos, 1.);
+		AdjustMeshSod(cusp_s, rho_, mass_, e_, p_, shock_pos);
 		cusp_s->grid.PrintWholeRow("Output/RemeshedCoords.txt", cusp_s->grid.GetCoordinates());
 	}
-	cusp_s->InitFlowAG(rho_, mass_, e_, p_, shock_pos);
+	InitFlowAG(cusp_s, rho_, mass_, e_, p_, shock_pos, false);
 	cusp_s->CalculateVolumes();
 	cusp_s->grid.SetRow("volume", cusp_s->vol);
 	//cusp_s->grid.RefreshR("R");
@@ -864,6 +868,41 @@ void AdjustMeshSod(Solver* solver, double* rho_, double* mass_, double* e_, doub
 	solver->RhoUPH();
 }
 
+void DefineVariables(Solver* solver, vector<string>& cvars_names, vector<string>& vars_names)
+{
+	for (int i = 0; i < cvars_names.size(); ++i)
+	{
+		solver->vars[cvars_names[i]] = i;
+		solver->c_var_name[i] = cvars_names[i];
+		if (cvars_names[i] == "RhoA")
+			solver->g_RHO_A = i;
+		if (cvars_names[i] == "RhoUA")
+			solver->g_RHO_U_A = i;
+		if (cvars_names[i] == "RhoEA")
+			solver->g_RHO_E_A = i;
+	}
+	solver->eq_num = solver->vars.size();
+
+	for (int i = 0; i < vars_names.size(); ++i)
+	{
+		solver->vars_o[vars_names[i]] = i;
+		solver->var_name[i] = vars_names[i];
+		if (vars_names[i] == "Rho")
+			solver->g_RHO = i;
+		if (vars_names[i] == "U")
+			solver->g_U = i;
+		if (vars_names[i] == "p")
+			solver->g_P = i;
+		if (vars_names[i] == "E")
+			solver->g_E = i;
+		if (vars_names[i] == "H")
+			solver->g_H = i;
+		if (vars_names[i] == "A")
+			solver->g_A = i;
+	}
+	solver->var_num = solver->vars_o.size();
+}
+
 void unsteady_sod_test(const string &output_file, const string& yml_file, const double end_time_)	// Standard example as in Blazek (CUSP)
 {
 	cout << endl << "  ---  unsteady sod test  ---  " << endl;
@@ -882,6 +921,10 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	hllc_s->SetGrid(sod);
 	hllc_s->ReadBoundaries("Input/sod_boundary_test.yml");
 	hllc_s->SetOutputFile(output_file);
+
+	vector<string> cvars_names{ "RhoA", "RhoUA", "RhoEA" };
+	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "T", "dA", "dp", "dT" };
+	DefineVariables(hllc_s, cvars_names, vars_names);
 
 	// Euler euqations
 	hllc_s->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hllc_s->vars, hllc_s->vars_o);	// RhoA, RhoUA
@@ -1192,6 +1235,10 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->ReadBoundaries("Input/sun_loop_boundary.yml");
 	hll->SetOutputFile(output_file);
 
+	vector<string> cvars_names{ "RhoA", "RhoUA", "RhoEA" };
+	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "n", "T", "dA", "dp", "dT", "FT", "RadFunc" };
+	DefineVariables(hll, cvars_names, vars_names);
+
 	// Euler euqations
 	hll->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hll->vars, hll->vars_o);	// RhoA, RhoUA
 	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*g" }, hll->vars, hll->vars_o);
@@ -1271,7 +1318,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->RhoUPH();
 	hll->RefreshBoundaries();
 
-	double physDt_ = 1.e-10;
+	double physDt_ = end_time_;
 
 	hll->cvnm1 = hll->cv;
 	hll->iter = 0.;

@@ -81,8 +81,8 @@ void HLLE::LRState(string var_)
 			rs[eq][i] = fv[eq][i + 1] - 0.5 * delt_r;
 			ls[eq][i] = fv[eq][i + 0] + 0.5 * delt_l;
 		}
-		rs[P][i] = max(rs[P][i], 1e-20);
-		ls[P][i] = max(ls[P][i], 1e-20);
+		rs[g_P][i] = max(rs[g_P][i], 1e-20);
+		ls[g_P][i] = max(ls[g_P][i], 1e-20);
 	}
 
 }
@@ -190,7 +190,7 @@ void HLLE::SetRHS()
 		fill_fv_equations<double>(filling_type::common, fv_ref, i);
 		for (int eq = 0; eq < eq_num; ++eq) {
 			rhs[eq][i] = dummy[eq * imax + i] - dummy[eq * imax + i - 1];
-			rhs[eq][i] += make_equation<double>(eq, Solver::equation::term_name::source, fv_ref);
+			rhs[eq][i] += make_equation<double>(eq, Solver::equation::term_name::source, fv_ref);		// Adding source term
 		}
 	}
 }
@@ -270,14 +270,14 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 
 	vector<adouble*> fv_ref(var_num);
 	vector<adouble> fv_val(var_num);
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	for (int var = 0; var < var_num; ++var)
 		fv_ref[var] = &fv_val[var];
 
 	fill_fv_equations<adouble>(filling_type::common, fv_ref, i, true, x_);
 
 	vector<adouble*> fv_o(var_num);
 	vector<adouble> state(var_num);
-	for (int var = 0; var < FIELD_VAR_COUNT; ++var)
+	for (int var = 0; var < var_num; ++var)
 	{
 		state[var] = direction > 0 ? rs[var][i] : ls[var][i];
 		fv_o[var] = &state[var];
@@ -289,18 +289,18 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 	vector<adouble*>& fv_r = direction > 0 ? fv_o : fv_ref;
 	vector<adouble*>& fv_l = direction < 0 ? fv_o : fv_ref;
 
-	c_l = sqrt(gamma_ * *fv_l[P] / *fv_l[RHO]);
-	c_r = sqrt(gamma_ * *fv_r[P] / *fv_r[RHO]);
+	c_l = sqrt(gamma_ * *fv_l[g_P] / *fv_l[g_RHO]);
+	c_r = sqrt(gamma_ * *fv_r[g_P] / *fv_r[g_RHO]);
 
-	RT = adept::sqrt(*fv_r[RHO] / *fv_l[RHO]);
-	uh = (*fv_l[U] + RT * *fv_r[U]) / (1. + RT);
-	Hh = (*fv_l[H] + RT * *fv_r[H]) / (1. + RT);
+	RT = adept::sqrt(*fv_r[g_RHO] / *fv_l[g_RHO]);
+	uh = (*fv_l[g_U] + RT * *fv_r[g_U]) / (1. + RT);
+	Hh = (*fv_l[g_H] + RT * *fv_r[g_H]) / (1. + RT);
 	ch = sqrt((gamma_ - 1.) * (Hh - uh * uh / 2.) );
 
-	SLm = adept::min(*fv_l[U] - c_l, uh - ch);
-	SRp = adept::max(*fv_r[U] + c_r, uh + ch);
+	SLm = adept::min(*fv_l[g_U] - c_l, uh - ch);
+	SRp = adept::max(*fv_r[g_U] + c_r, uh + ch);
 
-	adouble S_star = (*fv_r[P] - *fv_l[P] + *fv_l[RHO] * *fv_l[U] * (SLm - *fv_l[U]) - *fv_r[RHO] * *fv_r[U] * (SRp - *fv_r[U])) / (*fv_l[RHO] * (SLm - *fv_l[U]) - *fv_r[RHO] * (SRp - *fv_r[U]));
+	adouble S_star = (*fv_r[g_P] - *fv_l[g_P] + *fv_l[g_RHO] * *fv_l[g_U] * (SLm - *fv_l[g_U]) - *fv_r[g_RHO] * *fv_r[g_U] * (SRp - *fv_r[g_U])) / (*fv_l[g_RHO] * (SLm - *fv_l[g_U]) - *fv_r[g_RHO] * (SRp - *fv_r[g_U]));
 	vector<adept::adouble> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
 
 	//			FL case								FR case
@@ -361,9 +361,8 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 			for (int k = 0; k < 3; ++k)
 				beta_k[k] = 0.5 * (c_k[k + 1] - c_k[k]);
 
-			fcav[RHO_A] =   beta_k[0] * FL[RHO_A]   + beta_k[1] * FHLLE[RHO_A]   + beta_k[2] * FR[RHO_A];
-			fcav[RHO_U_A] = beta_k[0] * FL[RHO_U_A] + beta_k[1] * FHLLE[RHO_U_A] + beta_k[2] * FR[RHO_U_A];
-			fcav[RHO_E_A] = beta_k[0] * FL[RHO_E_A] + beta_k[1] * FHLLE[RHO_E_A] + beta_k[2] * FR[RHO_E_A];
+			for (int eq = 0; eq < eq_num; ++eq)
+				fcav[eq] =   beta_k[0] * FL[eq]   + beta_k[1] * FHLLE[eq]   + beta_k[2] * FR[eq];
 		}
 		if (contact)
 		{
@@ -386,11 +385,11 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 				double loc_rho = 0.;
 
 				if (c_k[k] > 0)
-					upw_rho = fv[RHO][i] - fv[RHO][i - 1];
+					upw_rho = fv[g_RHO][i] - fv[g_RHO][i - 1];
 				else
-					upw_rho = fv[RHO][i + 2] - fv[RHO][i + 1];
+					upw_rho = fv[g_RHO][i + 2] - fv[g_RHO][i + 1];
 
-				loc_rho = fv[RHO][i + 1] - fv[RHO][i];
+				loc_rho = fv[g_RHO][i + 1] - fv[g_RHO][i];
 				if (loc_rho == 0.)
 					r_k[k] = 0.;
 				else
@@ -423,15 +422,13 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 
 			if (false)
 			{
-				fcav[RHO_A] = beta_k[0] * FL[RHO_A] + beta_k[1] * FL_s[RHO_A] + beta_k[2] * FR_s[RHO_A] + beta_k[3] * FR[RHO_A];
-				fcav[RHO_U_A] = beta_k[0] * FL[RHO_U_A] + beta_k[1] * FL_s[RHO_U_A] + beta_k[2] * FR_s[RHO_U_A] + beta_k[3] * FR[RHO_U_A];
-				fcav[RHO_E_A] = beta_k[0] * FL[RHO_E_A] + beta_k[1] * FL_s[RHO_E_A] + beta_k[2] * FR_s[RHO_E_A] + beta_k[3] * FR[RHO_E_A];
+				for (int eq = 0; eq < eq_num; ++eq)
+					fcav[eq] = beta_k[0] * FL[eq] + beta_k[1] * FL_s[eq] + beta_k[2] * FR_s[eq] + beta_k[3] * FR[eq];
 			}
 			else
 			{
-				fcav[RHO_A] = 0.5 * (FL[RHO_A] + FR[RHO_A]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[RHO_A] - FL[RHO_A]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[RHO_A] - FL_s[RHO_A]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[RHO_A] - FR_s[RHO_A]);
-				fcav[RHO_U_A] = 0.5 * (FL[RHO_U_A] + FR[RHO_U_A]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[RHO_U_A] - FL[RHO_U_A]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[RHO_U_A] - FL_s[RHO_U_A]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[RHO_U_A] - FR_s[RHO_U_A]);
-				fcav[RHO_E_A] = 0.5 * (FL[RHO_E_A] + FR[RHO_E_A]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[RHO_E_A] - FL[RHO_E_A]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[RHO_E_A] - FL_s[RHO_E_A]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[RHO_E_A] - FR_s[RHO_E_A]);
+				for (int eq = 0; eq < eq_num; ++eq)
+					fcav[eq] = 0.5 * (FL[eq] + FR[eq]) - 0.5 * sign(c_k[1]) * fi_k[1] * (FL_s[eq] - FL[eq]) - 0.5 * sign(c_k[2]) * fi_k[2] * (FR_s[eq] - FL_s[eq]) - 0.5 * sign(c_k[3]) * fi_k[3] * (FR[eq] - FR_s[eq]);
 			}
 		}
 	}
@@ -493,7 +490,7 @@ vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adoub
 	vector<adept::adouble> flux(eq_num);
 	vector<adept::adouble> D_star = { 0., 1., S_star };
 	adept::adouble S_K = (direction > 0. ? SLm : SRp);
-	adept::adouble p_star = S_K * (*vars[P] + *vars[RHO] * (S_K - *vars[U]) * (S_star - *vars[U]));
+	adept::adouble p_star = S_K * (*vars[g_P] + *vars[g_RHO] * (S_K - *vars[g_U]) * (S_star - *vars[g_U]));
 
 	unsigned int eq = 0;
 	for (const auto& equation : equations)
