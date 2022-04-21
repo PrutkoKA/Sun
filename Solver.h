@@ -134,8 +134,8 @@ public:
 		{TEMP, "T"},
 		{DA, "dA"},
 		{DP, "dp"},
-		{DTEMP, "dT"},
-		//{FT, "FT"}
+		{DTEMP, "dT"}
+		//, {FT, "FT"}
 		//{RAD, "Rad"},
 		//, {RADFUNC, "RadFunc"}
 	};
@@ -253,8 +253,10 @@ public:
 
 	vector<string> RemeshFuncs;
 	vector<double> MaxOfRemeshFuncs;
+	double RemeshTau;
 	double MaxX;
 	double MaxF;
+	double MaxFn;
 	string RemeshVar;
 
 	vector < double > a;			///< cross sections of tube

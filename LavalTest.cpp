@@ -949,8 +949,10 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	// Parameters to adjust mesh were used
 	if (hllc_s->remesh)
 	{
+		hllc_s->RemeshTau = 1e-2;		// Should be more smart inside adjusting?
 		hllc_s->RemeshVar = hllc_s->c_var_name[hllc_s->RHO_A];
 		hllc_s->MaxX = 1.;
+		hllc_s->MaxFn = 1e-1;
 		hllc_s->MaxF = 1.;
 		hllc_s->RemeshFuncs = { };
 		hllc_s->MaxOfRemeshFuncs = { };
@@ -1100,10 +1102,10 @@ void Rad_function(const std::vector<std::vector<double>>& params, const vector<a
 {
 	const int T_id = var_name_ids.at(names[0]);
 	const adept::adouble& Temp = field_var.empty() ? params[T_id][i] : field_var[T_id];
-	constexpr double C = 3e-23;		// 3e-22 / 1e7 * 1e6 = 3e-23 [erg / cm^3 / s] -> [J / m^3 / s]
+	constexpr double C = 3e-35;		// 3e-22 / 1e7 * 1e6 = 3e-23 [erg / cm^3 / s] -> [J / m^3 / s]
 	if (Temp < 2e4)
 	{
-		result = C * pow((0.5e4 * Temp), 3);
+		result = C * pow((5e-5 * Temp), 3);
 	}
 	else if (Temp <= 2e5)
 	{
@@ -1111,7 +1113,7 @@ void Rad_function(const std::vector<std::vector<double>>& params, const vector<a
 	}
 	else
 	{
-		result = C / sqrt(0.5e5 * Temp) + 2e-23 / 10. /*Si system*/ * sqrt(1e-8 * Temp);
+		result = C / sqrt(5e-6 * Temp) + 2e-36 /*Si system*/ * sqrt(1e-8 * Temp);
 	}
 }
 
@@ -1122,6 +1124,7 @@ void AdjustMeshSun(Solver* solver, Loop& loop)
 	solver->SetGrid(loop);
 	vector < string > ignore(1, loop.TYPE_COL);
 	vector < vector < double > > new_tab = solver->grid.NewTable("coordinate", ran1, ignore, false);
+	solver->x = ran1;
 	solver->grid.SetData(new_tab);
 
 	init_sun_atmosphere(solver);
@@ -1135,7 +1138,7 @@ void AdjustMeshSun(Solver* solver, Loop& loop)
 
 void init_sun_atmosphere(Solver* solver)
 {
-	cout << "Initializing flow" << endl;
+	//cout << "Initializing flow" << endl;
 
 	int eq_num = solver->eq_num;
 	int imax = solver->imax;
@@ -1173,7 +1176,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 
 	hll = CreateReadConfigFile(file_name);
 
-	hll->HideOutput();
+	//hll->HideOutput();
 
 	loop.ReadFile("Input/sun_loop_mesh.txt");
 
@@ -1192,7 +1195,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	// Euler euqations
 	hll->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hll->vars, hll->vars_o);	// RhoA, RhoUA
 	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*g" }, hll->vars, hll->vars_o);
-	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc" }, hll->vars, hll->vars_o);
+	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc", "-7e-6A" }, hll->vars, hll->vars_o);
 
 	hll->set_fv_equation(		// Rho = RhoA / A
 		"Rho",
@@ -1212,7 +1215,8 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	);
 	hll->set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
 		"p",
-		{ "0.66666667Rho", "*E", "" }
+		//{ "Rho", "*E", "/GAMMAM" }
+		{ "E", "-0.5U^2", "*Rho", "/GAMMAM" }
 	);
 	hll->set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
 		"H",
@@ -1228,7 +1232,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	);
 	hll->set_fv_equation(		// FT = 10e-6 * T^2.5 * dT
 		"FT",
-		{ "1e-9T^2.5", "*dT", "" }	// 1e-6 / 1e7 * 1e4 = 1e-9 [erg / cm^2 / s] -> [J / m^2 / s]
+		{ "1e-11T^2.5", "*dT", "" }	// Wrong -> 1e-6 / 1e7 * 1e4 = 1e-9 [erg / cm^2 / s] -> [J / m^2 / s]
 	);
 	hll->AddDelayedFvEquation({ "FT" });
 
@@ -1247,9 +1251,11 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	// Parameters to adjust mesh were used
 	if (hll->remesh)
 	{
+		hll->RemeshTau = 1e2;		// Should be more smart inside adjusting?
 		hll->RemeshVar = hll->c_var_name[hll->RHO_A];
 		hll->MaxX = 12500000.;
 		hll->MaxF = 1.0793596511952E-10;
+		hll->MaxFn = hll->MaxF / 10.;
 		hll->RemeshFuncs = { "T" };
 		hll->MaxOfRemeshFuncs = { 1056100. };
 		for (int i = 0; i < 100; ++i) {
@@ -1265,8 +1271,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->RhoUPH();
 	hll->RefreshBoundaries();
 
-	double fac = 1. / 1e1;
-	double physDt_ = 0.2e-2 * fac / 1.;
+	double physDt_ = 1.e-10;
 
 	hll->cvnm1 = hll->cv;
 	hll->iter = 0.;
@@ -1276,6 +1281,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->S.resize((hll->ib2 - 1) * hll->eq_num, (hll->ib2 - 1) * hll->eq_num);
 	hll->S.reserve(VectorXi::Constant((hll->ib2 - 1) * hll->eq_num, hll->eq_num * hll->eq_num));
 
+	hll->grid.AddColumn("old_coords", hll->grid.GetValues("coordinate"));
 	hll->iter = 0.;
 
 	int iter = 0;
@@ -1289,6 +1295,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 			hll->calculate_mass_matrix();
 			hll->fill_inverse_mass_matrix();
 
+			hll->grid.SetRow("old_coords", hll->grid.GetValues("coordinate"));
 			hll->cvn_old = hll->cvn;
 			hll->cvnm1_old = hll->cvnm1;
 

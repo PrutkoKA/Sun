@@ -1080,61 +1080,47 @@ double Solver::SolveExplImpl(double physDt)
 		return 0.;
 	}
 
-	double tau = 1e-2;
+	double tau = RemeshTau;		// Manage this properly
 	if (remesh && true) {
 		vector <double> old_coords = grid.GetCoordinates();
 		// New adaptive grid
 		RhoUPH();
-		vector < double > fv_U = fv[U];
-		vector < double > fv_H = fv[H];
-		vector < double > fv_U_new = fv[U];
-		vector < double > fv_H_new = fv[H];
+
 		for (int i = 0; i < 1; ++i) {
 			for (int var = 0; var < CONS_VAR_COUNT; ++var)
 				grid.SetRow(c_var_name[var], cv[var]);
 
-			vector< vector <double> > functions;;
+			vector< vector <double> > functions;
 			vector< double > Fs;
-			//if (iter > 1)
-			//if (false)
+			
+			functions.push_back (cvn[vars[RemeshVar]]);
+			Fs.push_back (MaxFn);
+			if (!RemeshFuncs.empty())
 			{
-				functions.push_back (cvn[RHO_A]);
-				//functions.push_back (fv[TEMP]);
-				/*functions.push_back(fv_U_new);
-				functions.push_back(fv_H_new);*/
+				auto get_var_column = [this](string& col_name) -> vector<double>
+				{
+					if (vars.contains(col_name))
+						return grid.GetValues(col_name);
+					if (vars_o.contains(col_name))
+						return fv[vars_o[col_name]];
+				};
 
-				Fs.push_back (1e-1);
-				//Fs.push_back (MaxOfRemeshFuncs[0]);
-				/*Fs.push_back(1.);
-				Fs.push_back(1.);*/
+				int old_size = functions.size();
+				functions.resize(old_size + RemeshFuncs.size());
+				Fs.insert(Fs.end(), MaxOfRemeshFuncs.begin(), MaxOfRemeshFuncs.end());
+				for (int i = 0; i < RemeshFuncs.size(); ++i)
+					functions[old_size + i] = get_var_column(RemeshFuncs[i]);
 			}
-			grid.CalculateResolution(/*MaxX*/1., /*MaxF*/1e0, c_var_name[RHO_A], "coordinate", functions, Fs);
-			grid.CalculateConcentration(/*MaxX*/1., "coordinate");
 
-			/*grid.SetRow("rho", cv1);
-			grid.SetRow("rhoU", cv2);
-			grid.SetRow("rhoE", cv3);*/
-			if (grid.ColumnExists(var_name[U]))
-			{
-				grid.SetRow(var_name[U], fv_U);
-				grid.SetRow(var_name[H], fv_H);
-			}
-			else
-			{
-				grid.AddColumn(var_name[U], fv_U);
-				grid.AddColumn(var_name[H], fv_H);
-			}
-			//grid.SetRow("coordinate", old_coords);
+			grid.CalculateResolution(MaxX, MaxF, RemeshVar, "coordinate", functions, Fs);
+			grid.CalculateConcentration(MaxX, "coordinate");
 
 			vector <string> ignore;
 			ignore.push_back("old_coords");
-			x = grid.RefineMesh(dt[0]/*1.*/, /*10.*/tau, 1., ignore);
+			x = grid.RefineMesh(dt[0], tau, 1., ignore);
 
 			for (int var = 0; var < CONS_VAR_COUNT; ++var)
 				cv[var] = grid.GetValues(c_var_name[var]);
-
-			fv_U_new = grid.GetValues(var_name[U]);
-			fv_H_new = grid.GetValues(var_name[H]);
 
 			RefreshBoundaries();						// Refresh boundary conditions
 			RhoUPH();

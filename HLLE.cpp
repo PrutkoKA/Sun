@@ -139,9 +139,12 @@ void HLLE::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double
 	vector < double > x_val(eq_num);
 	double gamma_ = GetGamma();
 
-	x_val[RHO_A] = fv[RHO][i];
-	x_val[RHO_U_A] = fv[RHO][i] * fv[U][i];
-	x_val[RHO_E_A] = (fv[P][i] / (gamma_ - 1.) + 0.5 * fv[RHO][i] * pow(fv[U][i], 2));
+	vector<double*> fv_ref(var_num);
+	for (int v = 0; v < var_num; ++v)
+		fv_ref[v] = &fv[v][i];
+
+	for (int eq = 0; eq < eq_num; ++eq)
+		x_val[eq] = make_equation<double>(eq, Solver::equation::term_name::dt, fv_ref);
 
 	vector<adept::adouble> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());

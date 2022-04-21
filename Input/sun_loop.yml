@@ -14,7 +14,7 @@ tolerance: 1e-2
 time_treat: explicit        # implicit, explicit
 steadiness: unsteady
 
-remesh: true
+remesh: false
 
 time_stepping: dual_time_stepping       # dual_time_stepping, two_step_RK
 
