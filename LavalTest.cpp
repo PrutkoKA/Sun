@@ -1136,7 +1136,7 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	cout << endl << "   OK   " << endl;
 }
 
-void Rad_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, adept::adouble& result)
+void Rad_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, adept::adouble& result)
 {
 	const int T_id = var_name_ids.at(names[0]);
 	const adept::adouble& Temp = field_var.empty() ? params[T_id][i] : field_var[T_id];
@@ -1155,19 +1155,46 @@ void Rad_function(const std::vector<std::vector<double>>& params, const vector<a
 	}
 }
 
-void gravity_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, adept::adouble& result)
+void gravity_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, adept::adouble& result)
 {
 	const int X_id = var_name_ids.at(names[0]);
 	const adept::adouble& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
 
-	double L_half = 4e7;
-	double L = 2. * L_half;
-	double h = 1.4e7;
-	double b = (L - 2. * h) / (2. * sqrt(1 - 4. * h / L));
+	constexpr double L_half = 4e7;
+	constexpr double L = 2. * L_half;
+	constexpr double h = 1.4e7;
+	const double b = (L - 2. * h) / (2. * sqrt(1 - 4. * h / L));
 
 	double dz_ds = (h / (1. - sqrt(1. - pow(L / 2. / b, 2))) / sqrt(1. - pow(s.value() / b, 2)) * s.value() / b) / b;
 
 	result = -270. * dz_ds;
+}
+
+void heating_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, adept::adouble& result)
+{
+	const int X_id = var_name_ids.at(names[0]);
+	const adept::adouble& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
+
+	constexpr double L_half = 4e7;
+	constexpr double E_0 = 3.8e-6;
+	constexpr double q = 1e-3;
+	constexpr double f = 0.75;
+	constexpr double lambda = 1e7;
+	constexpr double max_time = 3000.;
+	constexpr double start_time = 0.;
+	bool is_left = s < 0.;
+
+	const double s_1 = (is_left ? -L_half : L_half);
+	const double factor = (is_left ? 1. : f);
+
+	double E = E_0;
+	if (time >= start_time && time <= start_time + max_time)
+	{
+		double gamma = sin(3.1416 * (time - start_time) / max_time);
+		E += q * factor * gamma * exp(-fabs(s.value() - s_1) / lambda);		// May be fabs???
+	}
+
+	result = E;
 }
 
 void AdjustMeshSun(Solver* solver, Loop& loop)
@@ -1247,13 +1274,13 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->SetOutputFile(output_file);
 
 	vector<string> cvars_names{ "RhoA", "RhoUA", "RhoEA" };
-	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "x", "n", "T", "dA", "dp", "dT", "FT", "RadFunc", "grav" };
+	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "x", "n", "T", "dA", "dp", "dT", "FT", "RadFunc", "grav", "HeatFunc" };
 	DefineVariables(hll, cvars_names, vars_names);
 
 	// Euler euqations
 	hll->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hll->vars, hll->vars_o);	// RhoA, RhoUA
 	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*grav" }, hll->vars, hll->vars_o);
-	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc", "-7e-6A" }, hll->vars, hll->vars_o);
+	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc", "-HeatFunc" }, hll->vars, hll->vars_o);
 
 	hll->set_fv_equation(		// Rho = RhoA / A
 		"Rho",
@@ -1296,6 +1323,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 
 	hll->set_function("RadFunc", Rad_function, hll->vars_o, { "T" });
 	hll->set_function("grav", gravity_function, hll->vars_o, { "x" });
+	hll->set_function("HeatFunc", heating_function, hll->vars_o, { "x" });
 
 	double convtol = hll->GetTolerance();
 	double drho = 1.;
@@ -1306,7 +1334,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	// Parameters to adjust mesh were used
 	if (hll->remesh)
 	{
-		hll->RemeshTau = 1e2;		// Should be more smart inside adjusting?
+		hll->RemeshTau = 1e-4;		// Should be more smart inside adjusting?
 		hll->RemeshVar = hll->c_var_name[hll->RHO_A];
 		hll->MaxX = 12500000.;
 		hll->MaxF = 1.0793596511952E-10;
@@ -1321,12 +1349,12 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->CalculateVolumes();
 	hll->grid.SetRow("volume", hll->vol);
 
-	//hll->grid.PrintTable("Output/sun_table.txt");
+	hll->grid.PrintTable("Output/sun_table.txt");
 
 	hll->RhoUPH();
 	hll->RefreshBoundaries();
 
-	double physDt_ = 1e-5;
+	double physDt_ = 1e-6;
 
 	hll->cvnm1 = hll->cv;
 	hll->iter = 0.;
@@ -1358,6 +1386,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 			{
 				drho = hll->Solve(physDt_);
 			}
+			hll->Remesh();
 
 			hll->cvnm1 = hll->cvn;
 			hll->cvn = hll->cv;

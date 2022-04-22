@@ -589,9 +589,11 @@ vector< double > Loop::RefineMesh(double dt_, double tau_, double relax_coef, ve
 	//std::transform(vec.begin() + 1, vec.end() - 1, vec.begin(), vec.begin() + 1, [](double n, double prev_x) -> double {return prev_x + 1. / n; });
 	std::transform(result_dx.begin(), result_dx.end() - 1, vec.begin(), vec.begin() + 1, [](double dx, double prev_x) -> double {return prev_x + dx; });
 
-	std::transform(vec.begin(), vec.end(), vec.begin(), std::bind(std::multiplies<double>(), std::placeholders::_1, x_.back()));
+	std::transform(vec.begin(), vec.end(), vec.begin(), std::bind(std::multiplies<double>(), std::placeholders::_1, x_.back() - x_[0]));
+	if (fabs(x_[0]) > 1e-10)
+		std::transform(vec.begin(), vec.end(), vec.begin(), std::bind(std::plus<double>(), std::placeholders::_1, x_[0]));
 
-	vec.insert(vec.begin(), 0.);
+	vec.insert(vec.begin(), x_[0]);
 	vec[vec.size() - 2] = x_.back();
 	vec.back() = x_.back();
 

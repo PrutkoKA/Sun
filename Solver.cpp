@@ -248,7 +248,7 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 					field_var_val[i] = *field_var[i];
 			}
 
-			return call.get_function_value<T>(fv, field_var_val, point);
+			return call.get_function_value<T>(fv, field_var_val, point, Global_Time);
 		}
 		else
 		{
@@ -291,7 +291,7 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 					field_var_val[i] = *field_var[i];
 			}
 
-			return call.get_function_value<T>(fv, field_var_val, point);
+			return call.get_function_value<T>(fv, field_var_val, point, Global_Time);
 		}
 		}
 	}
@@ -1043,12 +1043,21 @@ double Solver::SolveExplImpl(double physDt)
 		ComputeRHSandJacobian(true);
 		RHSProcessing(rhsstage, RK_stages_num, physDt, rhsold);		// RHS preparations, unsteady modification if needed
 		FinalImplicitRHS_CV_Calculation(rhsstage, cvstage);
+		Global_Time += physDt;		// Is it true?
 	} else if (!steadiness && time_stepping == 1) {	// If unsteady and explicit two step RK
 		FinalTSRK_CV_Calculation(rhsstage, cvstage);
 		Global_Time += physDt * cfl;
 		return 0.;
 	}
+	else
+		Global_Time += physDt;
 
+	Remesh();
+	return Convergence();
+}
+
+void Solver::Remesh()
+{
 	double tau = RemeshTau;		// Manage this properly
 	if (remesh && true) {
 		vector <double> old_coords = grid.GetCoordinates();
@@ -1061,9 +1070,9 @@ double Solver::SolveExplImpl(double physDt)
 
 			vector< vector <double> > functions;
 			vector< double > Fs;
-			
-			functions.push_back (cvn[vars[RemeshVar]]);
-			Fs.push_back (MaxFn);
+
+			functions.push_back(cvn[vars[RemeshVar]]);
+			Fs.push_back(MaxFn);
 			if (!RemeshFuncs.empty())
 			{
 				auto get_var_column = [this](string& col_name) -> vector<double>
@@ -1131,8 +1140,6 @@ double Solver::SolveExplImpl(double physDt)
 		calculate_mass_matrix();
 		fill_inverse_mass_matrix();
 	}
-
-	return Convergence();
 }
 
 void Solver::RHSProcessing(vector < vector < vector < double > > >& rhsstage, int rks, double physDt, vector < vector < double > >& rhsold)
@@ -2084,18 +2091,18 @@ Solver::equation::equation(string eq_name_, vector<string> dt_term_, vector<stri
 }
 
 template <typename T>
-T Solver::custom_func::get_function_value(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i)
+T Solver::custom_func::get_function_value(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i, double time)
 {
 	adept::adouble result(0.);
-	func(params, params_a, var_names, param_names, i, result);
+	func(params, params_a, var_names, param_names, i, time, result);
 	return result;
 }
 
 template<>
-double Solver::custom_func::get_function_value<double>(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i)
+double Solver::custom_func::get_function_value<double>(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i, double time)
 {
 	adept::adouble result(0.);
-	func(params, params_a, var_names, param_names, i, result);
+	func(params, params_a, var_names, param_names, i, time, result);
 	return result.value();
 }
 
