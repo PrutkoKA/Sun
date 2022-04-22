@@ -1,12 +1,6 @@
-type: transmissive
+type: walls
 first:
-#last:
-  inflow:
-    p01: 1e5      # inlet total pressure [Pa]
-    t01: 288.     # inlet total temperature [K]
+  T: 6554.9     # temperature [K]
 
 last:
-#first:
-  outflow:
-    p2: 0.7e5    # outlet static pressure [Pa]
-    # p2: 0.37e5    # outlet static pressure [Pa]
+  T: 6554.9     # temperature [K]

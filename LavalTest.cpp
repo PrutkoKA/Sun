@@ -899,6 +899,8 @@ void DefineVariables(Solver* solver, vector<string>& cvars_names, vector<string>
 			solver->g_H = i;
 		if (vars_names[i] == "A")
 			solver->g_A = i;
+		if (vars_names[i] == "x")
+			solver->g_X = i;
 	}
 	solver->var_num = solver->vars_o.size();
 }
@@ -965,13 +967,6 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 
 	int maxiter = hllc_s->GetMaxIterNum();
 	double gamma__ = hllc_s->GetGamma();
-	double cpgas_ = hllc_s->GetCp();
-	double t01_ = hllc_s->GetInflowT();
-	double p01_ = hllc_s->GetInflowP();
-	double p2_ = hllc_s->GetOutflowP();
-	int id = hllc_s->GetInflowId();
-	double section = hllc_s->GetSection()[(id > 0 ? id - 2 : id + 1)];
-
 	double gam1_ = gamma__ - 1.;	// $\gamma_ - 1$
 
 	double rho_[2] = { 1, 0.125 };
@@ -1160,6 +1155,21 @@ void Rad_function(const std::vector<std::vector<double>>& params, const vector<a
 	}
 }
 
+void gravity_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, adept::adouble& result)
+{
+	const int X_id = var_name_ids.at(names[0]);
+	const adept::adouble& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
+
+	double L_half = 4e7;
+	double L = 2. * L_half;
+	double h = 1.4e7;
+	double b = (L - 2. * h) / (2. * sqrt(1 - 4. * h / L));
+
+	double dz_ds = (h / (1. - sqrt(1. - pow(L / 2. / b, 2))) / sqrt(1. - pow(s.value() / b, 2)) * s.value() / b) / b;
+
+	result = -270. * dz_ds;
+}
+
 void AdjustMeshSun(Solver* solver, Loop& loop)
 {
 	CommonAdjustMesh(solver);
@@ -1198,7 +1208,7 @@ void init_sun_atmosphere(Solver* solver)
 		solver->cv[solver->RHO_A][i] = rho[i] * solver->a[i];		//	$\rho S$
 		solver->cv[solver->RHO_U_A][i] = 0.;					//	Initial velocity iz zero, I think $\rho u S$
 		solver->p[i] = 2. * m_proton_rep * rho[i] * k_Planc * Temp[i];
-		solver->cv[solver->RHO_E_A][i] = 1.5 * solver->p[i] * solver->a[i];	//	$\rho E S$
+		solver->cv[solver->RHO_E_A][i] = solver->p[i] / (solver->GetGamma() - 1.) * solver->a[i];	//	$\rho E S$
 	}
 
 	for (unsigned int var = 0; var < solver->CONS_VAR_COUNT; ++var)
@@ -1221,7 +1231,8 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 
 	//hll->HideOutput();
 
-	loop.ReadFile("Input/sun_loop_mesh.txt");
+	//loop.ReadFile("Input/sun_loop_mesh.txt");
+	loop.ReadFile("Input/sun_loop_article_mesh.txt");
 
 	// Make even grid
 	//vector < vector < double > > new_tab;
@@ -1236,12 +1247,12 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->SetOutputFile(output_file);
 
 	vector<string> cvars_names{ "RhoA", "RhoUA", "RhoEA" };
-	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "n", "T", "dA", "dp", "dT", "FT", "RadFunc" };
+	vector<string> vars_names{ "Rho", "U", "E", "p", "H", "A", "x", "n", "T", "dA", "dp", "dT", "FT", "RadFunc", "grav" };
 	DefineVariables(hll, cvars_names, vars_names);
 
 	// Euler euqations
 	hll->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hll->vars, hll->vars_o);	// RhoA, RhoUA
-	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*g" }, hll->vars, hll->vars_o);
+	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*grav" }, hll->vars, hll->vars_o);
 	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc", "-7e-6A" }, hll->vars, hll->vars_o);
 
 	hll->set_fv_equation(		// Rho = RhoA / A
@@ -1284,10 +1295,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->AddDelayedFvEquation({ "FT" });
 
 	hll->set_function("RadFunc", Rad_function, hll->vars_o, { "T" });
-	//hll->set_fv_equation(		// Lam_a = 3.75e-11 * T^3
-	//	"Rad",
-	//	{ "RadFunc" }
-	//);
+	hll->set_function("grav", gravity_function, hll->vars_o, { "x" });
 
 	double convtol = hll->GetTolerance();
 	double drho = 1.;
@@ -1318,7 +1326,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->RhoUPH();
 	hll->RefreshBoundaries();
 
-	double physDt_ = end_time_;
+	double physDt_ = 1e-5;
 
 	hll->cvnm1 = hll->cv;
 	hll->iter = 0.;

@@ -192,6 +192,11 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 	bool arrays_are_provided = cons_var || !fv_eq;
 	if (v_type == eq_term::var_type::not_defined)
 	{
+		if (var_name_ == var_name[g_X])
+		{
+			v_type = eq_term::var_type::coord;
+			return x[point];
+		}
 		if (var_name_ == var_name[g_A])
 		{
 			v_type = eq_term::var_type::area;
@@ -256,6 +261,8 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 	{
 		switch (v_type)
 		{
+		case eq_term::var_type::coord:
+			return x[point];
 		case eq_term::var_type::area:
 			return (arrays_are_provided ? 1. : a[point]);
 		case eq_term::var_type::gammam:
@@ -407,6 +414,8 @@ void Solver::fill_fv_underneath(const filling_type& f_type, int i, vector<T*>& f
 
 			if (var == g_A)
 				*fv_new[var] = a[i];
+			else if (var == g_X)
+				*fv_new[var] = x[i];
 			else
 				*fv_new[var] = make_fv_equation<T>(v_name, i, fv_new, cons_var);
 		}
@@ -462,6 +471,22 @@ void Solver::ReadBoundaries(string file_name)
 		b_type = "transmissive";
 		inflow_id = 0;
 		outflow_id = imax;
+	}
+	if (config["type"].as< string >() == "walls")
+	{
+		b_type = "walls";
+		if (config["first"]) {
+			inflow_id = 0;
+			T_b_in = config["first"]["T"].as< double >();
+			cout << "First wall temperature: " << T_b_in << endl;
+		}
+		if (config["last"]) {
+			outflow_id = imax;
+			T_b_out = config["last"]["T"].as< double >();
+			cout << "Last wall temperature: " << T_b_out << endl;
+		}
+
+				
 	}
 }
 
@@ -639,16 +664,34 @@ void Solver::RefreshBoundaries()
 	}
 	if (b_type == "transmissive")
 	{
-		double sigma = 1.;
 		for (int eq = 0; eq < eq_num; ++eq)
 			cv[eq][in_id] = cv[eq][in_id_p1];
 
 		p[in_id] = (gamma - 1.) * (cv[g_RHO_E_A][in_id] / a[in_id] - 0.5 * cv[g_RHO_U_A][in_id] * cv[g_RHO_U_A][in_id] / (cv[g_RHO_A][in_id] * a[in_id]));
 
 		for (int eq = 0; eq < eq_num; ++eq)
-			cv[eq][out_id] = cv[eq][out_id_p1] * sigma;
+			cv[eq][out_id] = cv[eq][out_id_p1];
 
 		p[out_id] = (gamma - 1.) * (cv[g_RHO_E_A][out_id] / a[out_id] - 0.5 * cv[g_RHO_U_A][out_id] * cv[g_RHO_U_A][out_id] / (cv[g_RHO_A][out_id] * a[out_id]));
+	}
+	if (b_type == "walls")
+	{
+		constexpr double m_p_reс = 5.9786e26;	// Reciprocal protan mass
+		cv[g_RHO_A][in_id] = cv[g_RHO_A][in_id_p1];
+		cv[g_RHO_U_A][in_id] = 0.;
+		cv[g_RHO_U_A][in_id_p1] = 0.;
+
+		p[in_id] = 2. * m_p_reс * cv[g_RHO_A][in_id] / a[in_id] * k_planc * T_b_in;
+		cv[g_RHO_E_A][in_id] = p[in_id] * a[in_id] * gam1;
+		cv[g_RHO_E_A][in_id_p1] = cv[g_RHO_E_A][in_id];
+
+		cv[g_RHO_A][out_id] = cv[g_RHO_A][out_id_p1];
+		cv[g_RHO_U_A][out_id] = 0.;
+		cv[g_RHO_U_A][out_id_p1] = 0.;
+
+		p[out_id] = 2. * m_p_reс * cv[g_RHO_A][out_id] / a[out_id] * k_planc * T_b_out;
+		cv[g_RHO_E_A][out_id] = p[out_id] * a[out_id] * gam1;
+		cv[g_RHO_E_A][out_id_p1] = cv[g_RHO_E_A][out_id];
 	}
 	//cv[N_A][0] = cv[N_A][1];
 	//cv[N_A][imax - 1] = cv[N_A][ib2 - 1];

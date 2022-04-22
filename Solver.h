@@ -80,6 +80,7 @@ struct eq_term
 		gamma,
 		gammam,
 		area,
+		coord,
 		cp,
 		g,
 		k_planc,
@@ -101,7 +102,7 @@ class Solver
 {
 public:
 	const double k_planc = 6.626e-34;
-	int g_RHO = -1, g_U = -1, g_P = -1, g_H = -1, g_E = -1, g_A = -1;
+	int g_RHO = -1, g_U = -1, g_P = -1, g_H = -1, g_E = -1, g_A = -1, g_X = -1;
 	int g_RHO_A = -1, g_RHO_U_A = -1, g_RHO_E_A = -1;
 
 	map<string, int> func_name_ids;
@@ -416,7 +417,7 @@ private:
 
 	int inflow_id;
 	double p_b_in;
-	double T_b_in;
+	double T_b_in, T_b_out;
 
 	int outflow_id;
 	double p_b_out;
