@@ -1052,7 +1052,7 @@ double Solver::SolveExplImpl(double physDt)
 	else
 		Global_Time += physDt;
 
-	Remesh();
+	//Remesh();
 	return Convergence();
 }
 
@@ -1849,10 +1849,10 @@ double Solver::SpectralRadius(vector< vector < double > >& cv_, int i)
 	for (int eq = 0; eq < eq_num; ++eq)
 		cons_var[eq] = cv_[eq][i];
 
-	double a = make_fv_equation<double>(var_name[g_A], i, vector<double*>(), cons_var.data());
-	rho = make_fv_equation<double>(var_name[g_RHO_A], i, vector<double*>(), cons_var.data()) / a;
-	u = make_fv_equation<double>(var_name[g_RHO_U_A], i, vector<double*>(), cons_var.data()) / rho / a;
-	rhoe = make_fv_equation<double>(var_name[g_RHO_E_A], i, vector<double*>(), cons_var.data()) / a;
+	double a = make_fv_equation<double>(var_name[g_A], i);
+	rho = make_fv_equation<double>(var_name[g_RHO], i, vector<double*>(), cons_var.data()) / a;		// Here we need to devide by a, as ususaly cons vars are without area, but here it is with! And in this equation the area is = 1, but it shouldn't here. Sorry.
+	u = make_fv_equation<double>(var_name[g_U], i, vector<double*>(), cons_var.data());
+	rhoe = make_fv_equation<double>(var_name[g_E], i, vector<double*>(), cons_var.data()) * rho;
 	cs = sqrt(gamma * (gamma - 1.) * (rhoe - 0.5 * rho * u * u) / rho);
 
 	return (cs  + abs(u)) * a;
