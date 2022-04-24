@@ -18,7 +18,7 @@
 	Doing something
 
 */
-void algo(int n, const adept::adouble* x, int m, adept::adouble* y);
+void algo(int n, const double_type* x, int m, double_type* y);
 //double algorithm_ad(const double x_val[2], // Input values
 //	double* Y_ad,          // Input-output adjoint
 //	double x_ad[2]);
@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
 	//Laval6();		// Unsteady
 
 	string output_file = "Output/sun_loop_result.txt";
-	loop_foot_point(output_file, "Input/sun_loop.yml", 1.e-5);
+	loop_foot_point(output_file, "Input/sun_loop.yml", 1.e-2);
 
 	string arg1;
 	if (argc > 1)
@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
 	//{
 	//	x_val[2] = i;
 	//	//adept::Stack stack;
-	//	vector<adept::adouble> x(3);
+	//	vector<double_type> x(3);
 	//	adept::set_values(&x[0], 3, x_val);
 	//	/*x.resize(3);
 	//	x[0] = 1.;
@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
 	//	x[2] = 1.;*/
 
 	//	stack.new_recording();
-	//	vector<adept::adouble> y(3);
+	//	vector<double_type> y(3);
 	//	algo(3, &x[0], 3, &y[0]);
 	//	stack.independent(&x[0], 3);
 	//	stack.dependent(&y[0], 3);
@@ -164,7 +164,7 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-void algo(int n, const adept::adouble* x, int m, adept::adouble* y)
+void algo(int n, const double_type* x, int m, double_type* y)
 {
 	//adept::aVector y(3);
 	y[0] = x[0];
@@ -180,11 +180,11 @@ void algo(int n, const adept::adouble* x, int m, adept::adouble* y)
 //double algorithm_ad(const double x_val[2], // Input values
 //	double* Y_ad,          // Input-output adjoint
 //	double x_ad[2]) {      // Output adjoint
-//	using namespace adept;                   // Import Stack and adouble from adept
+//	using namespace adept;                   // Import Stack and double_type from adept
 //	Stack stack;                             // Where differential information is stored
-//	adouble x[2] = { x_val[0], x_val[1] };     // Initialize adouble inputs
+//	double_type x[2] = { x_val[0], x_val[1] };     // Initialize double_type inputs
 //	stack.new_recording();                   // Start recording derivatives
-//	adouble Y = algorithm(x);                // Version overloaded for adouble args
+//	double_type Y = algorithm(x);                // Version overloaded for double_type args
 //	Y.set_gradient(*Y_ad);                   // Load the input-output adjoint
 //	stack.reverse();                         // Run the adjoint algorithm
 //	x_ad[0] = x[0].get_gradient();           // Extract the output adjoint for x[0]

@@ -398,10 +398,11 @@ void VL::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double >
 	x_val[RHO_U_A] = fv[RHO][i] * fv[U][i];
 	x_val[RHO_E_A] = (fv[P][i] / (gamma_ - 1.) + 0.5 * fv[RHO][i] * pow(fv[U][i], 2));
 
-	vector<adept::adouble> x(eq_num);
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputeSourceTerm(eq_num, &x[0], eq_num, &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -410,14 +411,17 @@ void VL::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double >
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	ComputeSourceTerm(eq_num, &x_val[0], eq_num, &y_val[0], i);
+#endif
 }
 
-void VL::ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adouble* source, int i)
+void VL::ComputeSourceTerm(int n, const double_type* cv, int m, double_type* source, int i)
 {
-	using adept::adouble;
+	//using double_type;
 
 	double da, dx;
-	adouble r, u, p;
+	double_type r, u, p;
 	double gamma_ = GetGamma();
 
 	r = cv[RHO_A];
@@ -441,10 +445,12 @@ void VL::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < do
 	x_val[RHO_U_A] = ls[RHO][i] * ls[U][i];
 	x_val[RHO_E_A] = (ls[P][i] / (gamma_ - 1.) + 0.5 * ls[RHO][i] * pow(ls[U][i], 2));
 	//adept::Stack stack;
-	vector<adept::adouble> x(eq_num);
+
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputePositiveFlux(eq_num, &x[0], eq_num, &y[0], i, simple);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -453,6 +459,9 @@ void VL::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < do
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	ComputePositiveFlux(eq_num, &x_val[0], eq_num, &y_val[0], i, simple);
+#endif
 }
 
 void VL::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac)
@@ -474,10 +483,12 @@ void VL::GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < d
 	x_val[RHO_U_A] = cv_[RHO_U_A][i]; // *cv_[U][i];
 	x_val[RHO_E_A] = cv_[RHO_E_A][i]; // (cv_[P][i] / (gamma_ - 1.) + 0.5 * cv_[RHO][i] * pow(cv_[U][i], 2));
 	//adept::Stack stack;
-	vector<adept::adouble> x(eq_num);
+
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	if (POS_NEG == true) {
 		ComputePositiveFlux(eq_num, &x[0], eq_num, &y[0], i, simple);
 	}
@@ -492,6 +503,14 @@ void VL::GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < d
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	if (POS_NEG == true) {
+		ComputePositiveFlux(eq_num, &x_val[0], eq_num, &y_val[0], i, simple);
+	}
+	else {
+		ComputeNegativeFlux(eq_num, &x_val[0], eq_num, &y_val[0], i, simple);
+	}
+#endif
 }
 
 void VL::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac, bool simple)
@@ -503,10 +522,12 @@ void VL::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < do
 	x_val[RHO_U_A] = rs[RHO][i] * rs[U][i];
 	x_val[RHO_E_A] = (rs[P][i] / (gamma_ - 1.) + 0.5 * rs[RHO][i] * pow(rs[U][i], 2));
 	//adept::Stack stack;
-	vector<adept::adouble> x(eq_num);
+
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputeNegativeFlux(eq_num, &x[0], eq_num, &y[0], i, simple);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -515,13 +536,16 @@ void VL::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < do
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	ComputeNegativeFlux(eq_num, &x_val[0], eq_num, &y_val[0], i, simple);
+#endif
 }
 
-void VL::ComputeFlux(int n, const adept::adouble * x, int m, adept::adouble * fcav, int i, int direction, bool simple)
+void VL::ComputeFlux(int n, const double_type * x, int m, double_type * fcav, int i, int direction, bool simple)
 {
-	using adept::adouble;
+	//using double_type;
 
-	adouble r, u, p_, h, c, mach, f_mass_p;
+	double_type r, u, p_, h, c, mach, f_mass_p;
 	double ro, uo, po, ho, co, macho, MpL, MmR, M;	//Other
 	double gamma_ = GetGamma();
 	double sign_(Sign(direction));
@@ -539,16 +563,22 @@ void VL::ComputeFlux(int n, const adept::adouble * x, int m, adept::adouble * fc
 		co = sqrt(gamma_ * po / ro);
 		macho = (uo) / co;
 
+#ifdef USE_ADEPT
+		const double mach_val = mach.value();
+#else
+		const double& mach_val = mach;
+#endif
+
 		if (direction > 0) {
 			if (mach >= 1.)
 			{
-				MpL = mach.value();
+				MpL = mach_val;
 			}
 			else if (mach <= -1.) {
 				MpL = 0.;
 			}
 			else {
-				MpL = 0.25 * pow(mach.value() + 1., 2) * Sign(mach.value());;// *aSign(machl);
+				MpL = 0.25 * pow(mach_val + 1., 2) * Sign(mach_val);;// *aSign(machl);
 			}
 
 			if (macho >= 1.)
@@ -579,10 +609,10 @@ void VL::ComputeFlux(int n, const adept::adouble * x, int m, adept::adouble * fc
 				MmR = 0.;
 			}
 			else if (mach <= -1.) {
-				MmR = mach.value();
+				MmR = mach_val;
 			}
 			else {
-				MmR = 0.25 * pow(mach.value() - 1., 2) * Sign(mach.value());// *aSign(machr);
+				MmR = 0.25 * pow(mach_val - 1., 2) * Sign(mach_val);// *aSign(machr);
 			}
 		}
 
@@ -606,12 +636,12 @@ void VL::ComputeFlux(int n, const adept::adouble * x, int m, adept::adouble * fc
 		}
 }
 
-void VL::ComputePositiveFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i, bool simple)
+void VL::ComputePositiveFlux(int n, const double_type* x, int m, double_type* fcavp, int i, bool simple)
 {
 	ComputeFlux(n, x, m, fcavp, i, 1, simple);
 }
 
-void VL::ComputeNegativeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavm, int i, bool simple)
+void VL::ComputeNegativeFlux(int n, const double_type* x, int m, double_type* fcavm, int i, bool simple)
 {
 	ComputeFlux(n, x, m, fcavm, i, -1, simple);
 }

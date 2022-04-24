@@ -114,6 +114,9 @@ void HLLE::ComputeRHSandJacobian(bool NO_JAC)
 	//bool SGS(L_SGS.size() > 0);
 
 	ResetDummy();
+#ifdef USE_OMP
+#pragma omp parallel for num_threads(MAX_THREAD_NUM) private(si, fluxp, fluxn, source)
+#endif
 	for (int i = 0; i < ib2; ++i) {
 		si = 0.5 * (a[i] + a[i + 1]);
 		GetPositiveFluxAndJacobian(i, fluxp, jac);
@@ -145,10 +148,11 @@ void HLLE::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double
 	for (int eq = 0; eq < eq_num; ++eq)
 		x_val[eq] = make_equation<double>(eq, Solver::equation::term_name::dt, fv_ref);
 
-	vector<adept::adouble> x(eq_num);
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputeSourceTerm(&x[0], &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -157,23 +161,27 @@ void HLLE::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	y_val.resize(eq_num);
+	ComputeSourceTerm(&x_val[0], &y_val[0], i);
+#endif
 }
 
-void HLLE::ComputeSourceTerm(const adept::adouble* cv, adept::adouble* source, int i)
+void HLLE::ComputeSourceTerm(const double_type* cv, double_type* source, int i)
 {
-	using adept::adouble;
+	//using double_type;
 
 	double da, dx;
 	double gamma_ = GetGamma();
 
-	vector<adouble> fv_a(var_num);
-	vector<adept::adouble*> fv_ref(var_num);
+	vector<double_type> fv_a(var_num);
+	vector<double_type*> fv_ref(var_num);
 	for (int v = 0; v < var_num; ++v)
 		fv_ref[v] = &fv_a[v];
 
-	fill_fv_equations<adept::adouble>(filling_type::common, fv_ref, i, true, cv);
+	fill_fv_equations<double_type>(filling_type::common, fv_ref, i, true, cv);
 	for (int eq = 0; eq < eq_num; ++eq)
-		source[eq] = make_equation<adouble>(eq, Solver::equation::term_name::source, fv_ref);
+		source[eq] = make_equation<double_type>(eq, Solver::equation::term_name::source, fv_ref);
 }
 
 void HLLE::SetRHS()
@@ -212,10 +220,11 @@ void HLLE::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	for (int eq = 0; eq < eq_num /** 3*/; ++eq)
 		x_val[eq] = make_equation<double>(eq % eq_num, Solver::equation::term_name::dt, ls_vec[eq / eq_num]);
 
-	vector<adept::adouble> x(eq_num);
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputePositiveFlux(&x[0], &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -224,6 +233,10 @@ void HLLE::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	y_val.resize(eq_num);
+	ComputePositiveFlux(&x_val[0], &y_val[0], i);
+#endif
 }
 
 void HLLE::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
@@ -243,11 +256,12 @@ void HLLE::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < 
 
 	for (int eq = 0; eq < eq_num /** 3*/; ++eq)
 		x_val[eq] = make_equation<double>(eq % eq_num, Solver::equation::term_name::dt, rs_vec[eq / eq_num]);
-
-	vector<adept::adouble> x(eq_num);
+	
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputeNegativeFlux(&x[0], &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -256,55 +270,59 @@ void HLLE::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	y_val.resize(eq_num);
+	ComputeNegativeFlux(&x_val[0], &y_val[0], i);
+#endif
 }
 
-void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, int direction)
+void HLLE::ComputeFlux(const double_type* x_, double_type* fcav, int i, int direction)
 {
-	using adept::adouble;
+	//using double_type;
 	bool contact = solver_name == "hllc";
 	
 	double gamma_ = GetGamma();
 	double sign_(Sign(direction));
 	bool use_WAF = false && i != 0 && i != ib2 - 1;
 
-	vector<adouble*> fv_ref(var_num);
-	vector<adouble> fv_val(var_num);
+	vector<double_type*> fv_ref(var_num);
+	vector<double_type> fv_val(var_num);
 	for (int var = 0; var < var_num; ++var)
 		fv_ref[var] = &fv_val[var];
 
-	fill_fv_equations<adouble>(filling_type::common, fv_ref, i, true, x_);
+	fill_fv_equations<double_type>(filling_type::common, fv_ref, i, true, x_);
 
-	vector<adouble*> fv_o(var_num);
-	vector<adouble> state(var_num);
+	vector<double_type*> fv_o(var_num);
+	vector<double_type> state(var_num);
 	for (int var = 0; var < var_num; ++var)
 	{
 		state[var] = direction > 0 ? rs[var][i] : ls[var][i];
 		fv_o[var] = &state[var];
 	}
 
-	adouble c_l, c_r;
-	adouble RT, uh, Hh, ch, SLm, SRp;
+	double_type c_l, c_r;
+	double_type RT, uh, Hh, ch, SLm, SRp;
 
-	vector<adouble*>& fv_r = direction > 0 ? fv_o : fv_ref;
-	vector<adouble*>& fv_l = direction < 0 ? fv_o : fv_ref;
+	vector<double_type*>& fv_r = direction > 0 ? fv_o : fv_ref;
+	vector<double_type*>& fv_l = direction < 0 ? fv_o : fv_ref;
 
 	c_l = sqrt(gamma_ * *fv_l[g_P] / *fv_l[g_RHO]);
 	c_r = sqrt(gamma_ * *fv_r[g_P] / *fv_r[g_RHO]);
 
-	RT = adept::sqrt(*fv_r[g_RHO] / *fv_l[g_RHO]);
+	RT = double_sqrt(*fv_r[g_RHO] / *fv_l[g_RHO]);
 	uh = (*fv_l[g_U] + RT * *fv_r[g_U]) / (1. + RT);
 	Hh = (*fv_l[g_H] + RT * *fv_r[g_H]) / (1. + RT);
 	ch = sqrt((gamma_ - 1.) * (Hh - uh * uh / 2.) );
 
-	SLm = adept::min(*fv_l[g_U] - c_l, uh - ch);
-	SRp = adept::max(*fv_r[g_U] + c_r, uh + ch);
+	SLm = double_min(*fv_l[g_U] - c_l, uh - ch);
+	SRp = double_max(*fv_r[g_U] + c_r, uh + ch);
 
-	adouble S_star = (*fv_r[g_P] - *fv_l[g_P] + *fv_l[g_RHO] * *fv_l[g_U] * (SLm - *fv_l[g_U]) - *fv_r[g_RHO] * *fv_r[g_U] * (SRp - *fv_r[g_U])) / (*fv_l[g_RHO] * (SLm - *fv_l[g_U]) - *fv_r[g_RHO] * (SRp - *fv_r[g_U]));
-	vector<adept::adouble> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
+	double_type S_star = (*fv_r[g_P] - *fv_l[g_P] + *fv_l[g_RHO] * *fv_l[g_U] * (SLm - *fv_l[g_U]) - *fv_r[g_RHO] * *fv_r[g_U] * (SRp - *fv_r[g_U])) / (*fv_l[g_RHO] * (SLm - *fv_l[g_U]) - *fv_r[g_RHO] * (SRp - *fv_r[g_U]));
+	vector<double_type> FL(eq_num), FL_s(eq_num), FHLLE(eq_num), FR_s(eq_num), FR(eq_num);
 
 	//			FL case								FR case
 	if ( (SLm >= 0. && direction > 0.) || (SRp <= 0. && direction < 0.) || use_WAF) {
-		vector<adept::adouble> fcav_copy{ construct_side_flux_array(fv_ref, i) };
+		vector<double_type> fcav_copy{ construct_side_flux_array(fv_ref, i) };
 		move(fcav_copy.begin(), fcav_copy.end(), fcav);
 		if (use_WAF)
 		{
@@ -319,7 +337,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 	{
 		// FHLLE
 		if ((SLm <= 0. && SRp >= 0.) || use_WAF) {
-			vector<adept::adouble> fcav_copy{ construct_hlle_flux_array(fv_ref, SLm, SRp, direction, i) };
+			vector<double_type> fcav_copy{ construct_hlle_flux_array(fv_ref, SLm, SRp, direction, i) };
 			move(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
 			{
@@ -333,7 +351,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 		//							FL*	case										FR* case
 		if ( ((SLm <= 0. && S_star >= 0. && direction > 0.) || ((S_star <= 0. && SRp >= 0. && direction < 0.) || use_WAF)) )
 		{
-			vector<adept::adouble> fcav_copy{ construct_hllc_flux_array(fv_ref, SLm, SRp, S_star, direction, i) };
+			vector<double_type> fcav_copy{ construct_hllc_flux_array(fv_ref, SLm, SRp, S_star, direction, i) };
 			move(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
 			{
@@ -350,13 +368,13 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 		double dt_dx = dt[i] / (x[i + 1] - x[i]);
 		if (!contact)
 		{
-			vector < adouble > c_k(4);
+			vector < double_type > c_k(4);
 			c_k[0] = -1.;
 			c_k[3] = 1.;
 			c_k[1] = min (max (dt_dx * SLm, c_k[0]), c_k[3]);
 			c_k[2] = min (max (dt_dx * SRp, c_k[0]), c_k[3]);
 
-			vector < adouble > beta_k(3);
+			vector < double_type > beta_k(3);
 			for (int k = 0; k < 3; ++k)
 				beta_k[k] = 0.5 * (c_k[k + 1] - c_k[k]);
 
@@ -365,8 +383,8 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 		}
 		if (contact)
 		{
-			auto sign = [](adouble a) {if (a < 0.) return -1.; else if (a > 0.) return 1.; else return 0.; };
-			vector < adouble > c_k(5);
+			auto sign = [](double_type a) {if (a < 0.) return -1.; else if (a > 0.) return 1.; else return 0.; };
+			vector < double_type > c_k(5);
 			c_k[0] = -1.;
 			c_k[4] = 1.;
 			c_k[1] = min(max(dt_dx * SLm, c_k[0]), c_k[4]);
@@ -377,7 +395,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 
 			if (debug)
 				cout << "r_k\ti = " << i << "\t";
-			vector < adouble > r_k(5);
+			vector < double_type > r_k(5);
 			for (int k = 0; k < r_k.size(); ++k)
 			{
 				double upw_rho = 0.;
@@ -400,7 +418,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 			if (debug)
 				cout << "\n";
 
-			vector < adouble > fi_k(5);
+			vector < double_type > fi_k(5);
 			for (int k = 0; k < fi_k.size(); ++k)
 			{
 				if (r_k[k] <= 0.)
@@ -415,7 +433,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 					fi_k[k] = 2. * abs(c_k[k]) - 1.;
 			}
 
-			vector < adouble > beta_k(4);
+			vector < double_type > beta_k(4);
 			for (int k = 0; k < 4; ++k)
 				beta_k[k] = 0.5 * (c_k[k + 1] - c_k[k]);
 
@@ -433,12 +451,12 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 	}
 }
 
-void HLLE::ComputePositiveFlux(const adept::adouble* x, adept::adouble* fcavp, int i)
+void HLLE::ComputePositiveFlux(const double_type* x, double_type* fcavp, int i)
 {
 	ComputeFlux(x, fcavp, i, 1);
 }
 
-void HLLE::ComputeNegativeFlux(const adept::adouble* x, adept::adouble* fcavn, int i)
+void HLLE::ComputeNegativeFlux(const double_type* x, double_type* fcavn, int i)
 {
 	ComputeFlux(x, fcavn, i, -1);
 }
@@ -467,37 +485,37 @@ void HLLE::Dissipation(double beta) {}
 
 void HLLE::GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple) {}
 
-vector<adept::adouble> HLLE::construct_hlle_flux_array(const vector<adept::adouble*>& vars, const adept::adouble SLm, const adept::adouble SRp, const double direction, const int i)
+vector<double_type> HLLE::construct_hlle_flux_array(const vector<double_type*>& vars, const double_type SLm, const double_type SRp, const double direction, const int i)
 {
-	vector<adept::adouble> flux(eq_num);
+	vector<double_type> flux(eq_num);
 	unsigned int eq = 0;
 
 	for (const auto& equation : equations)
 	{
-		adept::adouble term = (direction > 0. ? SRp : SLm) * direction;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars) * term;
+		double_type term = (direction > 0. ? SRp : SLm) * direction;
+		flux[eq] += make_equation<double_type>(eq, Solver::equation::term_name::dx, vars) * term;
 		term = -SRp * SLm * direction;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars) * term;
+		flux[eq] += make_equation<double_type>(eq, Solver::equation::term_name::dt, vars) * term;
 		flux[eq] /= (SRp - SLm);
 		++eq;
 	}
 	return flux;
 }
 
-vector<adept::adouble> HLLE::construct_hllc_flux_array(const vector<adept::adouble*>& vars, const adept::adouble SLm, const adept::adouble SRp, const adept::adouble S_star, const double direction, const int i)
+vector<double_type> HLLE::construct_hllc_flux_array(const vector<double_type*>& vars, const double_type SLm, const double_type SRp, const double_type S_star, const double direction, const int i)
 {
-	vector<adept::adouble> flux(eq_num);
-	vector<adept::adouble> D_star = { 0., 1., S_star };
-	adept::adouble S_K = (direction > 0. ? SLm : SRp);
-	adept::adouble p_star = S_K * (*vars[g_P] + *vars[g_RHO] * (S_K - *vars[g_U]) * (S_star - *vars[g_U]));
+	vector<double_type> flux(eq_num);
+	vector<double_type> D_star = { 0., 1., S_star };
+	double_type S_K = (direction > 0. ? SLm : SRp);
+	double_type p_star = S_K * (*vars[g_P] + *vars[g_RHO] * (S_K - *vars[g_U]) * (S_star - *vars[g_U]));
 
 	unsigned int eq = 0;
 	for (const auto& equation : equations)
 	{
-		adept::adouble term = (direction > 0. ? SLm : SRp);
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dt, vars) * term;
+		double_type term = (direction > 0. ? SLm : SRp);
+		flux[eq] += make_equation<double_type>(eq, Solver::equation::term_name::dt, vars) * term;
 		term = -1.;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars) * term;
+		flux[eq] += make_equation<double_type>(eq, Solver::equation::term_name::dx, vars) * term;
 		flux[eq] *= S_star;
 		flux[eq] += p_star * D_star[eq];
 		

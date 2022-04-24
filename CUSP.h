@@ -29,12 +29,12 @@ public:
 	virtual void ComputeRHSandJacobian(bool NO_JAC = false);
 	void GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
 	void GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
-	void ComputePositiveFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i);
-	void ComputeNegativeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i);
-	void ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcav, int i, int direction = 0);
+	void ComputePositiveFlux(int n, const double_type* x, int m, double_type* fcavp, int i);
+	void ComputeNegativeFlux(int n, const double_type* x, int m, double_type* fcavp, int i);
+	void ComputeFlux(int n, const double_type* x, int m, double_type* fcav, int i, int direction = 0);
 	void SetFluxes(int i, vector < double >& fluxp, vector < double >& fluxn);
 	void GetSourceAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
-	void ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adouble* source, int i);
+	void ComputeSourceTerm(int n, const double_type* cv, int m, double_type* source, int i);
 	void SetRHS();
 
 	virtual void GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple = false);

@@ -21,12 +21,12 @@ public:
 	virtual void ComputeRHSandJacobian(bool NO_JAC = false);
 	void GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
 	void GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
-	void ComputePositiveFlux(const adept::adouble* x, adept::adouble* fcavp, int i);
-	void ComputeNegativeFlux(const adept::adouble* x, adept::adouble* fcavp, int i);
-	void ComputeFlux(const adept::adouble* x, adept::adouble* fcav, int i, int direction = 0);
+	void ComputePositiveFlux(const double_type* x, double_type* fcavp, int i);
+	void ComputeNegativeFlux(const double_type* x, double_type* fcavp, int i);
+	void ComputeFlux(const double_type* x, double_type* fcav, int i, int direction = 0);
 	void SetFluxes(int i, vector < double >& fluxp, vector < double >& fluxn);
 	void GetSourceAndJacobian(int i, vector < double >& y_val, vector < double >& jac);
-	void ComputeSourceTerm(const adept::adouble* cv, adept::adouble* source, int i);
+	void ComputeSourceTerm(const double_type* cv, double_type* source, int i);
 	void SetRHS();
 
 	virtual void GetFluxAndJacobian(int i, vector < double >& y_val, vector < vector < double > >& cv_, vector < double >& jac, bool POS_NEG, bool simple = false);
@@ -34,8 +34,8 @@ public:
 	{
 		stack.deactivate();
 	};
-	vector<adept::adouble> construct_hlle_flux_array(const vector<adept::adouble*>& vars, const adept::adouble SLm, const adept::adouble SRp, const double direction, const int i);
-	vector<adept::adouble> construct_hllc_flux_array(const vector<adept::adouble*>& vars, const adept::adouble SLm, const adept::adouble SRp, const adept::adouble S_star, const double direction, const int i);
+	vector<double_type> construct_hlle_flux_array(const vector<double_type*>& vars, const double_type SLm, const double_type SRp, const double direction, const int i);
+	vector<double_type> construct_hllc_flux_array(const vector<double_type*>& vars, const double_type SLm, const double_type SRp, const double_type S_star, const double direction, const int i);
 
 
 private:

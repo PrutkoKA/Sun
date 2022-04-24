@@ -20,6 +20,24 @@
 
 #include "EigenThings.h"
 
+#include "omp.h"
+
+#define USE_OMP
+#define MAX_THREAD_NUM 8
+
+//#define USE_ADEPT
+#ifdef USE_ADEPT
+	typedef adept::adouble double_type;
+	#define double_max adept::max
+	#define double_min adept::min
+	#define double_sqrt adept::sqrt
+#else
+	typedef double double_type;
+	#define double_max max
+	#define double_min min
+	#define double_sqrt sqrt
+#endif
+
 using namespace std::placeholders;
 
 using namespace Eigen;
@@ -178,7 +196,7 @@ public:
 		pair<string, vector<eq_term>> get_equation(const string& eq_name, const vector<eq_term>& eq_terms);
 	};
 
-	using custom_f = std::function<void(const std::vector<std::vector<double>>&, const vector<adept::adouble>&, const std::map < std::string, int >&, const std::vector<std::string>&, int i, const double time, adept::adouble&)>;
+	using custom_f = std::function<void(const std::vector<std::vector<double>>&, const vector<double_type>&, const std::map < std::string, int >&, const std::vector<std::string>&, int i, const double time, double_type&)>;
 
 	class custom_func
 	{
@@ -198,7 +216,7 @@ public:
 			param_names(param_names_) {};
 
 		template <typename T>
-		T get_function_value(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i, double time);
+		T get_function_value(const std::vector<std::vector<double>>& params, const vector<double_type>& params_a, int i, double time);
 	};
 
 	using DiagonalFunc = std::function < MatrixXd(std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < MatrixXd >&, std::vector < std::vector < double > >&, int,
@@ -385,7 +403,7 @@ public:
 	//void FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s);
 	void FillJacobian(MatrixXd& M_SGS, vector < double >& jac, double s);
 
-	vector<adept::adouble> construct_side_flux_array(const vector<adept::adouble*>& vars, const int i);
+	vector<double_type> construct_side_flux_array(const vector<double_type*>& vars, const int i);
 
 	void Remesh();
 
@@ -449,6 +467,6 @@ Solver* CreateReadConfigFile(string file_name);
 
 double Sign(double value);
 
-//adept::adouble aSign(adept::adouble value);
+//double_type aSign(double_type value);
 
 int count_(vector < int >& vec, int val);

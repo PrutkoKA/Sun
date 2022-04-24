@@ -340,10 +340,11 @@ void CUSP::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double
 	x_val[RHO_U_A] = fv[RHO][i] * fv[U][i];
 	x_val[RHO_E_A] = (fv[P][i] / (gamma_ - 1.) + 0.5 * fv[RHO][i] * pow(fv[U][i], 2));
 
-	vector<adept::adouble> x(eq_num);
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputeSourceTerm(eq_num, &x[0], eq_num, &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -352,14 +353,17 @@ void CUSP::GetSourceAndJacobian(int i, vector < double >& y_val, vector < double
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	ComputeSourceTerm(eq_num, &x_val[0], eq_num, &y_val[0], i);
+#endif // USE_ADEPT
 }
 
-void CUSP::ComputeSourceTerm(int n, const adept::adouble* cv, int m, adept::adouble* source, int i)
+void CUSP::ComputeSourceTerm(int n, const double_type* cv, int m, double_type* source, int i)
 {
-	using adept::adouble;
+	//using double_type;
 
 	double da, dx;
-	adouble r, u, p;
+	double_type r, u, p;
 	double gamma_ = GetGamma();
 
 	r = cv[RHO_A];
@@ -402,10 +406,12 @@ void CUSP::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	x_val[RHO_U_A] = ls[RHO][i] * ls[U][i];
 	x_val[RHO_E_A] = (ls[P][i] / (gamma_ - 1.) + 0.5 * ls[RHO][i] * pow(ls[U][i], 2));
 	//adept::Stack stack;
-	vector<adept::adouble> x(eq_num);
+
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputePositiveFlux(eq_num, &x[0], eq_num, &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -414,6 +420,9 @@ void CUSP::GetPositiveFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	ComputePositiveFlux(eq_num, &x_val[0], eq_num, &y_val[0], i);
+#endif
 }
 
 void CUSP::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < double >& jac)
@@ -425,10 +434,12 @@ void CUSP::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	x_val[RHO_U_A] = rs[RHO][i] * rs[U][i];
 	x_val[RHO_E_A] = (rs[P][i] / (gamma_ - 1.) + 0.5 * rs[RHO][i] * pow(rs[U][i], 2));
 	//adept::Stack stack;
-	vector<adept::adouble> x(eq_num);
+
+#ifdef USE_ADEPT
+	vector<double_type> x(eq_num);
 	adept::set_values(&x[0], eq_num, x_val.data());
 	stack.new_recording();
-	vector<adept::adouble> y(eq_num);
+	vector<double_type> y(eq_num);
 	ComputeNegativeFlux(eq_num, &x[0], eq_num, &y[0], i);
 	if (!time_expl) {
 		stack.independent(&x[0], eq_num);
@@ -437,13 +448,16 @@ void CUSP::GetNegativeFluxAndJacobian(int i, vector < double >& y_val, vector < 
 	}
 	for (int iy = 0; iy < eq_num; ++iy)
 		y_val[iy] = y[iy].value();
+#else
+	ComputeNegativeFlux(eq_num, &x_val[0], eq_num, &y_val[0], i);
+#endif
 }
 
-void CUSP::ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcav, int i, int direction)
+void CUSP::ComputeFlux(int n, const double_type* x, int m, double_type* fcav, int i, int direction)
 {
-	using adept::adouble;
+	//using double_type;
 
-	adouble r, u, p_, h;
+	double_type r, u, p_, h;
 	//double dr, du, dp_, dh;
 	double rav, uav, pav, cav, machn, h1;
 	double bfac, afac;
@@ -506,12 +520,12 @@ void CUSP::ComputeFlux(int n, const adept::adouble* x, int m, adept::adouble* fc
 	dummy[2 * imax + i] -= 0.5 * sign_ * (afac * r.value() * h.value() + bfac * r.value() * u.value() * h.value());*/
 }
 
-void CUSP::ComputePositiveFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavp, int i)
+void CUSP::ComputePositiveFlux(int n, const double_type* x, int m, double_type* fcavp, int i)
 {
 	ComputeFlux(n, x, m, fcavp, i, 1);
 }
 
-void CUSP::ComputeNegativeFlux(int n, const adept::adouble* x, int m, adept::adouble* fcavn, int i)
+void CUSP::ComputeNegativeFlux(int n, const double_type* x, int m, double_type* fcavn, int i)
 {
 	ComputeFlux(n, x, m, fcavn, i, -1);
 }

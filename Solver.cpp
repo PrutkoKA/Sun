@@ -9,7 +9,7 @@
 //
 //using namespace Eigen;
 
-//adept::adouble aSign(adept::adouble value);
+//double_type aSign(double_type value);
 
 using namespace YAML;
 
@@ -45,10 +45,10 @@ Solver::Solver(sol_struct& sol_init_) :
 {
 	if (false)
 	{
-		make_fv_equation<adept::adouble>(var_name[0], 0);	// To resolve adouble template in HLLE. Whaaat?? It even may be not executed.
+		make_fv_equation<double_type>(var_name[0], 0);	// To resolve double_type template in HLLE. Whaaat?? It even may be not executed.
 		make_equation<double>(0, Solver::equation::term_name::dt, vector<double*>());
-		vector<adept::adouble*> b;
-		fill_fv_equations<adept::adouble>(filling_type::common, b, 0);
+		vector<double_type*> b;
+		fill_fv_equations<double_type>(filling_type::common, b, 0);
 	}
 
 	eq_num = vars.size();
@@ -229,8 +229,13 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 		}
 		if (vars.find(var_name_) != vars.end())
 		{
-			v_type = eq_term::var_type::conservative;
-			v_id = vars[var_name_];
+#ifdef USE_OMP
+#pragma omp critical
+#endif
+			{
+				v_id = vars[var_name_];
+				v_type = eq_term::var_type::conservative;
+			}
 			return (arrays_are_provided ? cons_var[v_id] : cv[v_id][point]);
 		}
 		else if (functions.find(var_name_) != functions.end())
@@ -240,7 +245,7 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 			func_name_ids[var_name_] = v_id;
 			custom_func& call = functions.at(var_name_);
 
-			vector<adept::adouble> field_var_val;
+			vector<double_type> field_var_val;
 			if (arrays_are_provided)
 			{
 				field_var_val.resize(field_var.size());
@@ -252,8 +257,13 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 		}
 		else
 		{
-			v_type = eq_term::var_type::field;
-			v_id = vars_o[var_name_];
+#ifdef USE_OMP
+#pragma omp critical
+#endif
+			{
+				v_id = vars_o[var_name_];
+				v_type = eq_term::var_type::field;
+			}
 			return (arrays_are_provided ? *field_var[v_id] : fv[v_id][point]);
 		}
 	}
@@ -283,7 +293,7 @@ T Solver::get_var_value (const string& var_name_, const int point, eq_term::var_
 		{
 			custom_func& call = functions.at(var_name_);
 
-			vector<adept::adouble> field_var_val;
+			vector<double_type> field_var_val;
 			if (arrays_are_provided)
 			{
 				field_var_val.resize(field_var.size());
@@ -1786,6 +1796,9 @@ void Solver::RhoUPH()
 	vector<filling_type> f_types = { filling_type::only_vars, filling_type::only_diff };
 	for (auto f_type : f_types)
 	{
+#ifdef USE_OMP
+#pragma omp parallel for num_threads(MAX_THREAD_NUM) /*private(fv_ref)*/ firstprivate(f_type, fv_ref)
+#endif
 		for (int i = 0; i < imax; ++i)
 		{
 			for (int v = 0; v < var_num; ++v)
@@ -1798,6 +1811,9 @@ void Solver::RhoUPH()
 		for (auto eq_name : delayed_fv_equations)
 		{
 			int var_id = vars_o.at(eq_name);
+#ifdef USE_OMP
+#pragma omp parallel for num_threads(MAX_THREAD_NUM) firstprivate(var_id, eq_name)
+#endif
 			for (int i = 0; i < imax; ++i)
 				fv[var_id][i] = make_fv_equation<double>(eq_name, i);
 		}
@@ -2094,20 +2110,22 @@ Solver::equation::equation(string eq_name_, vector<string> dt_term_, vector<stri
 }
 
 template <typename T>
-T Solver::custom_func::get_function_value(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i, double time)
+T Solver::custom_func::get_function_value(const std::vector<std::vector<double>>& params, const vector<double_type>& params_a, int i, double time)
 {
-	adept::adouble result(0.);
+	double_type result(0.);
 	func(params, params_a, var_names, param_names, i, time, result);
 	return result;
 }
 
+#ifdef USE_ADEPT
 template<>
-double Solver::custom_func::get_function_value<double>(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& params_a, int i, double time)
+double Solver::custom_func::get_function_value<double>(const std::vector<std::vector<double>>& params, const vector<double_type>& params_a, int i, double time)
 {
-	adept::adouble result(0.);
+	double_type result(0.);
 	func(params, params_a, var_names, param_names, i, time, result);
 	return result.value();
 }
+#endif
 
 eq_term::eq_term(const string& term_s)
 {
@@ -2344,14 +2362,14 @@ int count_(vector < int >& vec, int val)
 	return count(vec.begin(), vec.end(), val);
 }
 
-vector<adept::adouble> Solver::construct_side_flux_array(const vector<adept::adouble*>& vars, const int i)
+vector<double_type> Solver::construct_side_flux_array(const vector<double_type*>& vars, const int i)
 {
-	vector<adept::adouble> flux(eq_num);
+	vector<double_type> flux(eq_num);
 	unsigned int eq = 0;
 	for (const auto &equation : equations)
 	{
-		adept::adouble term = 1.;
-		flux[eq] += make_equation<adept::adouble>(eq, Solver::equation::term_name::dx, vars) * term;
+		double_type term = 1.;
+		flux[eq] += make_equation<double_type>(eq, Solver::equation::term_name::dx, vars) * term;
 		++eq;
 	}
 	return flux;

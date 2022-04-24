@@ -1136,10 +1136,10 @@ void unsteady_sod_test(const string &output_file, const string& yml_file, const 
 	cout << endl << "   OK   " << endl;
 }
 
-void Rad_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, adept::adouble& result)
+void Rad_function(const std::vector<std::vector<double>>& params, const vector<double_type>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, double_type& result)
 {
 	const int T_id = var_name_ids.at(names[0]);
-	const adept::adouble& Temp = field_var.empty() ? params[T_id][i] : field_var[T_id];
+	const double_type& Temp = field_var.empty() ? params[T_id][i] : field_var[T_id];
 	constexpr double C = 3e-35;		// 3e-22 / 1e7 * 1e6 = 3e-23 [erg / cm^3 / s] -> [J / m^3 / s]
 	if (Temp < 2e4)
 	{
@@ -1155,25 +1155,31 @@ void Rad_function(const std::vector<std::vector<double>>& params, const vector<a
 	}
 }
 
-void gravity_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, adept::adouble& result)
+void gravity_function(const std::vector<std::vector<double>>& params, const vector<double_type>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, double_type& result)
 {
 	const int X_id = var_name_ids.at(names[0]);
-	const adept::adouble& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
+	const double_type& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
 
 	constexpr double L_half = 4e7;
 	constexpr double L = 2. * L_half;
 	constexpr double h = 1.4e7;
 	const double b = (L - 2. * h) / (2. * sqrt(1 - 4. * h / L));
 
-	double dz_ds = (h / (1. - sqrt(1. - pow(L / 2. / b, 2))) / sqrt(1. - pow(s.value() / b, 2)) * s.value() / b) / b;
+#ifdef USE_ADEPT
+	const double s_val = s.value();
+#else
+	const double &s_val = s;
+#endif
+
+	double dz_ds = (h / (1. - sqrt(1. - pow(L / 2. / b, 2))) / sqrt(1. - pow(s_val / b, 2)) * s_val / b) / b;
 
 	result = -270. * dz_ds;
 }
 
-void heating_function(const std::vector<std::vector<double>>& params, const vector<adept::adouble>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, adept::adouble& result)
+void heating_function(const std::vector<std::vector<double>>& params, const vector<double_type>& field_var, const std::map < std::string, int >& var_name_ids, const std::vector<std::string>& names, int i, double time, double_type& result)
 {
 	const int X_id = var_name_ids.at(names[0]);
-	const adept::adouble& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
+	const double_type& s = field_var.empty() ? params[X_id][i] : field_var[X_id];
 
 	constexpr double L_half = 4e7;
 	constexpr double E_0 = 3.8e-6;
@@ -1187,11 +1193,17 @@ void heating_function(const std::vector<std::vector<double>>& params, const vect
 	const double s_1 = (is_left ? -L_half : L_half);
 	const double factor = (is_left ? 1. : f);
 
+#ifdef USE_ADEPT
+	const double s_val = s.value();
+#else
+	const double& s_val = s;
+#endif
+
 	double E = E_0;
 	if (time >= start_time && time <= start_time + max_time)
 	{
 		double gamma = sin(3.1416 * (time - start_time) / max_time);
-		E += q * factor * gamma * exp(-fabs(s.value() - s_1) / lambda);		// May be fabs???
+		E += q * factor * gamma * exp(-fabs(s_val - s_1) / lambda);		// May be fabs???
 	}
 
 	result = E;
