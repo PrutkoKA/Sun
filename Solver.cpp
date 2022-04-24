@@ -1,4 +1,4 @@
-﻿// Solver
+// Solver
 
 #include "Solver.h"
 #include "CDS.h"
@@ -308,7 +308,10 @@ T Solver::calculate_term_value(eq_term& term, int point, const vector<T*>& field
 
 	double degree = term.degree;
 	double coef = term.coef;
-	value = coef * (fabs(degree - 1.) < 1e-5 ? value : pow(value, degree));
+	if (fabs(degree - 1.) > 1e-5)
+		value = pow(value, degree);
+		
+	value *= coef;
 	return value;
 };
 

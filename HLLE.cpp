@@ -19,7 +19,6 @@ void HLLE::LRState(string var_)
 		}
 	}
 
-	double af, bf;
 	double delt_l, delt_r;
 	double* d1 = dummy.data() + 1;
 
@@ -305,7 +304,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 
 	//			FL case								FR case
 	if ( (SLm >= 0. && direction > 0.) || (SRp <= 0. && direction < 0.) || use_WAF) {
-		vector<adept::adouble> fcav_copy = construct_side_flux_array(fv_ref, i);
+		vector<adept::adouble> fcav_copy{ construct_side_flux_array(fv_ref, i) };
 		move(fcav_copy.begin(), fcav_copy.end(), fcav);
 		if (use_WAF)
 		{
@@ -320,7 +319,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 	{
 		// FHLLE
 		if ((SLm <= 0. && SRp >= 0.) || use_WAF) {
-			vector<adept::adouble> fcav_copy = construct_hlle_flux_array(fv_ref, SLm, SRp, direction, i);
+			vector<adept::adouble> fcav_copy{ construct_hlle_flux_array(fv_ref, SLm, SRp, direction, i) };
 			move(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
 			{
@@ -334,7 +333,7 @@ void HLLE::ComputeFlux(const adept::adouble* x_, adept::adouble* fcav, int i, in
 		//							FL*	case										FR* case
 		if ( ((SLm <= 0. && S_star >= 0. && direction > 0.) || ((S_star <= 0. && SRp >= 0. && direction < 0.) || use_WAF)) )
 		{
-			vector<adept::adouble> fcav_copy = construct_hllc_flux_array(fv_ref, SLm, SRp, S_star, direction, i);
+			vector<adept::adouble> fcav_copy{ construct_hllc_flux_array(fv_ref, SLm, SRp, S_star, direction, i) };
 			move(fcav_copy.begin(), fcav_copy.end(), fcav);
 			if (use_WAF)
 			{

@@ -1301,7 +1301,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->set_fv_equation(		// p = (RhoEA / RhoA - 0.5U^2) * (gamma - 1) * RHO
 		"p",
 		//{ "Rho", "*E", "/GAMMAM" }
-		{ "E", "-0.5U^2", "*Rho", "/GAMMAM" }
+		{ "E", "-0.5U^2", "*Rho", "*GAMMAM" }
 	);
 	hll->set_fv_equation(		// H = gamma / (gamma - 1) * p / RHO + 0.5U^2
 		"H",
@@ -1334,7 +1334,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	// Parameters to adjust mesh were used
 	if (hll->remesh)
 	{
-		hll->RemeshTau = 1e-4;		// Should be more smart inside adjusting?
+		hll->RemeshTau = 1e-5;		// Should be more smart inside adjusting?
 		hll->RemeshVar = hll->c_var_name[hll->RHO_A];
 		hll->MaxX = 12500000.;
 		hll->MaxF = 1.0793596511952E-10;
@@ -1386,7 +1386,8 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 			{
 				drho = hll->Solve(physDt_);
 			}
-			hll->Remesh();
+			for (int i = 0; i < 10; ++i)
+				hll->Remesh();
 
 			hll->cvnm1 = hll->cvn;
 			hll->cvn = hll->cv;
