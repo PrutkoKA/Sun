@@ -3,7 +3,7 @@ gas: Ideal
 Cp: 1
 gamma: 1.666666666667
 g: 270
-cfl: 0.5
+cfl: 0.8
 lts: false                  # local time step: false ? true ?
 ERK: 5_4                    # Explicit Runge-Kutta Scheme (stage, order)    5_2, 5_3, 5_4
 IRK: 4_5                    # Implicit Runge-Kutta Scheme (stage, order, variant)   3_3, 3_4_1, 3_4_2, 6_4, 4_5, 11_5, 6_6
@@ -11,7 +11,7 @@ TSRK: 5_5                   # Two Step Runge-Kutta Scheme (stage, order) 5_5, 8_
 
 max_iter_num: 2000         # 100000
 tolerance: 1e-2
-time_treat: explicit        # implicit, explicit
+time_treat: implicit        # implicit, explicit
 steadiness: unsteady
 
 remesh: true

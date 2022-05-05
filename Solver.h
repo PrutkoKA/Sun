@@ -22,10 +22,10 @@
 
 #include "omp.h"
 
-#define USE_OMP
-#define MAX_THREAD_NUM 8
+//#define USE_OMP
+//#define MAX_THREAD_NUM 8
 
-//#define USE_ADEPT
+#define USE_ADEPT
 #ifdef USE_ADEPT
 	typedef adept::adouble double_type;
 	#define double_max adept::max
@@ -254,7 +254,7 @@ public:
 
 	vector<string> RemeshFuncs;
 	vector<double> MaxOfRemeshFuncs;
-	double RemeshTau;
+	double RemeshTau = -1.;
 	double MaxX;
 	double MaxF;
 	double MaxFn;

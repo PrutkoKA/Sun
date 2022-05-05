@@ -364,7 +364,14 @@ void Solver::fill_fv_equations(const filling_type &f_type, vector<T*>& fv_a, int
 
 	fill_fv_underneath<T>(f_type, i, fv_a, skipped, compute_differential, x_);
 	if (compute_differential && f_type != filling_type::only_vars)
+	{
 		compute_differential_var<T>(i, skipped, fv_a);
+		for (auto it = delayed_fv_equations.begin(); it != delayed_fv_equations.end() && f_type == filling_type::common; ++it)
+		{
+			string v_name = *it;
+			*fv_a[vars_o[v_name]] = make_fv_equation<T>(v_name, i, fv_a, x_);
+		}
+	}
 }
 
 template<typename T>
@@ -388,11 +395,14 @@ void Solver::compute_differential_var(int i, const vector<int>& skipped, vector<
 			fv_left_ref[j] = &fv_left[j];
 			fv_right_ref[j] = &fv_right[j];
 		}
-		alpha1 = (x[right_id] - x[i]) / (x[right_id] - x[left_id] + 1e-20);
-		alpha2 = (x[i] - x[left_id]) / (x[right_id] - x[left_id] + 1e-20);
-
-		fill_fv_equations<double>(filling_type::only_vars, fv_left_ref, left_id, false);		// Extra calculations if several d vars...
-		fill_fv_equations<double>(filling_type::only_vars, fv_right_ref, right_id, false);
+		if (fabs(x[right_id] - x[left_id]) > 1e-20)
+		{
+			alpha1 = (x[right_id] - x[i]) / (x[right_id] - x[left_id] + 1e-20) / (x[i] - x[left_id] + 1e-20);
+			alpha2 = (x[i] - x[left_id]) / (x[right_id] - x[left_id] + 1e-20) / (x[right_id] - x[i] + 1e-20);
+		
+			fill_fv_equations<double>(filling_type::only_vars, fv_left_ref, left_id, false);		// Extra calculations if several d vars...
+			fill_fv_equations<double>(filling_type::only_vars, fv_right_ref, right_id, false);
+		}
 	}
 
 	for (const int& var : skipped)
@@ -1108,7 +1118,7 @@ void Solver::Remesh()
 
 			vector <string> ignore;
 			ignore.push_back("old_coords");
-			x = grid.RefineMesh(dt[0], tau, 1., ignore);
+			x = grid.RefineMesh(/*dt[0], tau*/1., 10., 1., ignore);
 
 			for (int var = 0; var < eq_num; ++var)
 				cv[var] = grid.GetValues(c_var_name[var]);
@@ -1378,8 +1388,8 @@ MatrixXd Solver::Diagonal(std::vector < MatrixXd >& LeftFluxJac, std::vector <Ma
 	int Lind = i + 1;
 	int Uind = i - 1;
 
-	Li = Lower(LeftFluxJac, cv_, Lind);
-	Ui = Upper(RightFluxJac, cv_, Uind);
+	Li = Lower(LeftFluxJac, cv_, Lind);		// :_Func ??
+	Ui = Upper(RightFluxJac, cv_, Uind);	// U_Func ??
 	Di = SourceJac[i];
 
 	Di = (Li + Ui - Di * vol[i]);
@@ -2059,7 +2069,7 @@ void Solver::PrintResult()
 		c = sqrt(gamma * p[i] / rho);
 		mach = /*abs*/(u) / c;
 		fprintf(file, "%14.10le\t%le\t%le\t%le\t%le\t%le\t%le\t%le", 
-			x[i], a[i], rho, u, p[i], temp, mach, cv[g_RHO_U_A][i]);
+			x[i], a[i], rho, u, p[i], temp, make_fv_equation<double>("dT", i), cv[g_RHO_U_A][i]);
 
 		//if (AG) {
 		//	fprintf(file, "\t%lf", fv[n][i]/* / grid.GetResolution()[i]*/);
@@ -2191,9 +2201,9 @@ eq_term::eq_term(const string& term_s)
 //void Solver::FillJacobian(vector < vector < double > >& M_SGS, vector < double >& jac, double s)
 void Solver::FillJacobian(MatrixXd& M_SGS, vector < double >& jac, double s)
 {
-	for (int i = 0; i < eq_num; ++i)
+	for (int i = 0; i < eq_num; ++i)		// i - is a Conservative Variable number
 	{
-		for (int j = 0; j < eq_num; ++j)
+		for (int j = 0; j < eq_num; ++j)	// j - is a Flux number
 		{
 			//M_SGS[j][i] = jac[i * eq_num + j];// *s;
 			M_SGS(j, i) = jac[i * eq_num + j];// *s;

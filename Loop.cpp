@@ -613,11 +613,11 @@ vector< double > Loop::RefineMesh(double dt_, double tau_, double relax_coef, ve
 
 	//vec = Redistribute("coordinate", vec);
 
-	coef = relax_coef;
-	for (int i = 0; i < vec.size(); ++i)
-	{
-		vec[i] = coef * vec[i] + (1. - coef) * x_[i];
-	}
+	//coef = relax_coef;
+	//for (int i = 0; i < vec.size(); ++i)
+	//{
+	//	vec[i] = coef * vec[i] + (1. - coef) * x_[i];
+	//}
 
 	//vector < string > ignore;
 	vector < vector < double > > new_tab;

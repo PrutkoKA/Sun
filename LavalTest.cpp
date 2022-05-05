@@ -1292,7 +1292,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	// Euler euqations
 	hll->SetEquation("mass", { "Rho", "*A" }, { "Rho", "*U", "*A" }, { "" }, hll->vars, hll->vars_o);	// RhoA, RhoUA
 	hll->SetEquation("impulse", { "Rho", "*U", "*A" }, { "Rho", "*U^2", "+p", "*A" }, { "Rho", "*grav" }, hll->vars, hll->vars_o);
-	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { "n^2", "*RadFunc", "-HeatFunc" }, hll->vars, hll->vars_o);
+	hll->SetEquation("energy", { "Rho", "*E", "*A" }, { "Rho", "*E", "+p", "*U", "-FT", "*A" }, { /*"n^2", "*RadFunc", "-HeatFunc"*/"" }, hll->vars, hll->vars_o);
 
 	hll->set_fv_equation(		// Rho = RhoA / A
 		"Rho",
@@ -1346,7 +1346,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	// Parameters to adjust mesh were used
 	if (hll->remesh)
 	{
-		hll->RemeshTau = 1e-5;		// Should be more smart inside adjusting?
+		hll->RemeshTau = 1e-2;		// Should be more smart inside adjusting?
 		hll->RemeshVar = hll->c_var_name[hll->RHO_A];
 		hll->MaxX = 12500000.;
 		hll->MaxF = 1.0793596511952E-10;
@@ -1366,7 +1366,7 @@ void loop_foot_point(const string& output_file, const string& yml_file, const do
 	hll->RhoUPH();
 	hll->RefreshBoundaries();
 
-	double physDt_ = 1e-6;
+	double physDt_ = 1e-2;
 
 	hll->cvnm1 = hll->cv;
 	hll->iter = 0.;
